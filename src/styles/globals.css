@@ -1,0 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    /* Do NOT set height: 100% — the window is taller than the card,
+       so forcing 100% height creates blank transparent space below the popup. */
+    background: transparent;
+    color: #fefce8;
+    font-family: 'Inter', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  #root {
+    /* Let content define height; overflow hides the transparent remainder */
+    overflow: hidden;
+  }
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #3d3600; border-radius: 99px; }
+  ::-webkit-scrollbar-thumb:hover { background: #564d00; }
+
+  ::selection { background: rgba(245,158,11,0.35); color: #fefce8; }
+}
+
+@layer components {
+  .field-input {
+    @apply w-full bg-bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text-primary
+           placeholder:text-text-muted outline-none focus:border-border-focus transition-colors;
+  }
+}

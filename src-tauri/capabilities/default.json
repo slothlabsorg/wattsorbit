@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capability for WattsOrbit windows",
+  "windows": ["main", "dashboard"],
+  "permissions": [
+    "core:default",
+    "opener:allow-open-url"
+  ]
+}
