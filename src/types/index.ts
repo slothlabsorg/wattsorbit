@@ -32,6 +32,19 @@ export interface PowerStatus {
   cableType: string | null
   /** All USB devices currently connected */
   connectedDevices: UsbDevice[]
+  // ── Battery health ─────────────────────────────────────────────────────────
+  /** Total charge cycles completed */
+  cycleCount: number | null
+  /** Battery temperature in °C */
+  temperatureCelsius: number | null
+  /** Factory design capacity in mAh */
+  designCapacityMah: number | null
+  /** Current maximum capacity in mAh */
+  maxCapacityMah: number | null
+  /** Battery health % (maxCapacity / designCapacity × 100) */
+  healthPercent: number | null
+  /** macOS Optimized Battery Charging currently engaged */
+  optimizedCharging: boolean | null
   /** Non-fatal warning or error from the backend */
   error: string | null
 }

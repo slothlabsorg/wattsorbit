@@ -133,6 +133,22 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Battery temperature pill — amber if warm, red if hot */}
+            {status?.temperatureCelsius != null && (
+              <span
+                className="text-xs font-mono px-1.5 py-0.5 rounded-md"
+                style={
+                  status.temperatureCelsius >= 40
+                    ? { background: 'rgba(248,113,113,0.15)', color: '#f87171' }
+                    : status.temperatureCelsius >= 35
+                    ? { background: 'rgba(251,191,36,0.15)', color: '#fbbf24' }
+                    : { background: 'rgba(255,255,255,0.06)', color: '#6b7280' }
+                }
+                title="Battery temperature"
+              >
+                {status.temperatureCelsius.toFixed(1)}°C
+              </span>
+            )}
             {/* Last-updated dot */}
             <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" title={`Updated ${Math.round((Date.now() - lastUpdate) / 1000)}s ago`} />
             <CloseBtn />
@@ -173,6 +189,13 @@ export default function App() {
                   label="Net balance"
                   value={`${netBalance > 0 ? '+' : ''}${netBalance.toFixed(1)}W`}
                   highlight={netBalance > 0}
+                />
+              )}
+              {status.healthPercent != null && (
+                <StatPill
+                  label="Battery health"
+                  value={`${status.healthPercent}%`}
+                  highlight={status.healthPercent >= 80}
                 />
               )}
             </div>

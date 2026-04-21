@@ -31,6 +31,19 @@ pub struct PowerStatus {
     pub cable_type: Option<String>,
     pub connected_devices: Vec<UsbDevice>,
     pub error: Option<String>,
+    // ── Battery health ───────────────────────────────────────────────────────
+    /// Full charge cycles completed (from AppleSmartBattery)
+    pub cycle_count: Option<u32>,
+    /// Battery temperature in °C (raw ioreg Temperature / 100)
+    pub temperature_celsius: Option<f64>,
+    /// Original factory capacity in mAh
+    pub design_capacity_mah: Option<u32>,
+    /// Current maximum capacity in mAh (degrades over time)
+    pub max_capacity_mah: Option<u32>,
+    /// max_capacity / design_capacity × 100, clamped 0–100
+    pub health_percent: Option<u8>,
+    /// macOS "Optimized Battery Charging" engaged (delays charging past 80% overnight)
+    pub optimized_charging: Option<bool>,
 }
 
 impl Default for PowerStatus {
@@ -47,6 +60,12 @@ impl Default for PowerStatus {
             cable_type: None,
             connected_devices: vec![],
             error: None,
+            cycle_count: None,
+            temperature_celsius: None,
+            design_capacity_mah: None,
+            max_capacity_mah: None,
+            health_percent: None,
+            optimized_charging: None,
         }
     }
 }
@@ -241,6 +260,28 @@ mod macos {
             None
         };
 
+        // ── Battery health ────────────────────────────────────────────────
+        let cycle_count = extract_i64(ioreg, "CycleCount").map(|v| v as u32);
+
+        // Temperature is stored in units of 0.01 °C in AppleSmartBattery
+        let temperature_celsius = extract_i64(ioreg, "Temperature")
+            .map(|t| (t as f64) / 100.0);
+
+        // Design capacity and current max capacity (both in mAh)
+        let design_capacity_mah = extract_i64(ioreg, "DesignCapacity").map(|v| v as u32);
+        let max_capacity_mah    = extract_i64(ioreg, "MaxCapacity").map(|v| v as u32);
+
+        // Health = max / design × 100, clamped to 100
+        let health_percent = match (design_capacity_mah, max_capacity_mah) {
+            (Some(d), Some(m)) if d > 0 =>
+                Some(((m as f64 / d as f64) * 100.0).clamp(0.0, 100.0) as u8),
+            _ => None,
+        };
+
+        // macOS Optimised Battery Charging: field is 0/1 bool in ioreg
+        let optimized_charging = extract_i64(ioreg, "OptimizedChargingEngaged")
+            .map(|v| v != 0);
+
         PowerStatus {
             is_charging: is_plugged_in,
             charge_state,
@@ -253,6 +294,12 @@ mod macos {
             cable_type:   if is_plugged_in { cable_type }   else { None },
             connected_devices: vec![],
             error: None,
+            cycle_count,
+            temperature_celsius,
+            design_capacity_mah,
+            max_capacity_mah,
+            health_percent,
+            optimized_charging,
         }
     }
 

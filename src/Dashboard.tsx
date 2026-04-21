@@ -1,9 +1,8 @@
 import { useEffect, useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { openUrl } from '@tauri-apps/plugin-opener'
 import type { TodayStats, ChargeSession, DeviceStat, PowerSample, PowerStatus } from './types'
 import { deviceWatts, totalDeviceWatts } from './types'
-import { getTodayStats, getPowerStatus } from './lib/tauri'
+import { getTodayStats, getPowerStatus, openExternalUrl, setAutoStart } from './lib/tauri'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const fmtWh   = (wh: number) => `${wh.toFixed(1)} Wh`
@@ -325,6 +324,63 @@ function SectionHeader({ title, right }: { title: string; right?: string }) {
   )
 }
 
+// ── Autostart prompt ──────────────────────────────────────────────────────────
+
+const ASKED_KEY = 'wattsorbit_autostart_asked'
+
+function AutostartBanner({ onDone }: { onDone: () => void }) {
+  const [loading, setLoading] = useState(false)
+
+  async function handle(enable: boolean) {
+    setLoading(true)
+    try { await setAutoStart(enable) } catch { /* best-effort */ }
+    localStorage.setItem(ASKED_KEY, '1')
+    setLoading(false)
+    onDone()
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -8 }}
+      transition={{ duration: 0.25 }}
+      className="mb-6 rounded-xl border border-primary/30 bg-primary/8 px-4 py-3.5"
+    >
+      <div className="flex items-start gap-3">
+        <span className="text-xl shrink-0 mt-0.5">⚡</span>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-text-primary mb-0.5">
+            Start WattsOrbit at login?
+          </p>
+          <p className="text-xs text-text-muted leading-relaxed">
+            Run in the background so power data is always captured — even when you
+            don't open the app manually.
+          </p>
+          <div className="flex gap-2 mt-2.5">
+            <button
+              onClick={() => handle(true)}
+              disabled={loading}
+              className="px-3 py-1.5 rounded-lg bg-primary text-bg-base text-xs font-semibold
+                         hover:bg-amber-400 transition-colors disabled:opacity-50"
+            >
+              Yes, start at login
+            </button>
+            <button
+              onClick={() => handle(false)}
+              disabled={loading}
+              className="px-3 py-1.5 rounded-lg border border-border text-xs text-text-muted
+                         hover:text-text-secondary hover:border-border-muted transition-colors disabled:opacity-50"
+            >
+              Not now
+            </button>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
 // ── Landing page ──────────────────────────────────────────────────────────────
 
 const USE_CASES = [
@@ -346,6 +402,10 @@ const USE_CASES = [
 ]
 
 function Landing({ onOpen }: { onOpen: () => void }) {
+  const [showAutostart, setShowAutostart] = useState(
+    !localStorage.getItem(ASKED_KEY)
+  )
+
   return (
     <div className="min-h-screen bg-bg-base text-text-primary flex flex-col">
       {/* Hero */}
@@ -355,6 +415,11 @@ function Landing({ onOpen }: { onOpen: () => void }) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
         >
+          <AnimatePresence>
+            {showAutostart && (
+              <AutostartBanner onDone={() => setShowAutostart(false)} />
+            )}
+          </AnimatePresence>
           {/* Logo + name */}
           <div className="flex items-center gap-3 mb-6">
             <div className="w-14 h-14 rounded-2xl bg-primary/15 border border-primary/25 flex items-center justify-center">
@@ -415,19 +480,278 @@ function Landing({ onOpen }: { onOpen: () => void }) {
           </div>
           <div className="flex items-center gap-3">
             <button
-              onClick={() => openUrl('https://github.com/slothlabs')}
+              onClick={() => openExternalUrl('https://github.com/slothlabs')}
               className="text-xs text-text-muted hover:text-text-secondary transition-colors"
             >
               GitHub
             </button>
             <button
-              onClick={() => openUrl('https://ko-fi.com/slothlabs')}
+              onClick={() => openExternalUrl('https://ko-fi.com/slothlabs')}
               className="text-xs px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/25 text-primary
                          hover:bg-primary/20 transition-colors"
             >
               ☕ Support us
             </button>
           </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Battery Health Panel ──────────────────────────────────────────────────────
+
+function HealthBadge({ label, ok }: { label: string; ok: boolean }) {
+  return (
+    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+      ok ? 'bg-success/15 text-success' : 'bg-danger/15 text-danger'
+    }`}>
+      {label}
+    </span>
+  )
+}
+
+function BatteryHealthPanel({ power }: { power: PowerStatus }) {
+  const hasHealth = power.cycleCount != null || power.healthPercent != null
+  if (!hasHealth) return null
+
+  const healthColor =
+    power.healthPercent == null ? '#6b7280' :
+    power.healthPercent >= 80   ? '#34d399' :
+    power.healthPercent >= 60   ? '#fbbf24' : '#f87171'
+
+  const tempColor =
+    power.temperatureCelsius == null ? '#6b7280' :
+    power.temperatureCelsius >= 40   ? '#f87171' :
+    power.temperatureCelsius >= 35   ? '#fbbf24' : '#34d399'
+
+  return (
+    <div>
+      <SectionHeader title="Battery Health" />
+      <div className="bg-bg-surface border border-border rounded-xl p-4 space-y-4">
+
+        {/* Health % bar */}
+        {power.healthPercent != null && (
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs text-text-muted">Battery health</span>
+              <span className="text-sm font-mono font-bold" style={{ color: healthColor }}>
+                {power.healthPercent}%
+              </span>
+            </div>
+            <div className="h-2 bg-bg-overlay rounded-full overflow-hidden">
+              <motion.div
+                className="h-full rounded-full"
+                style={{ backgroundColor: healthColor }}
+                initial={{ width: 0 }}
+                animate={{ width: `${power.healthPercent}%` }}
+                transition={{ duration: 0.7, ease: 'easeOut' }}
+              />
+            </div>
+            <div className="flex justify-between mt-1 text-xs text-text-muted/60">
+              <span>0%</span>
+              <span>Good ≥ 80%</span>
+              <span>100%</span>
+            </div>
+          </div>
+        )}
+
+        {/* Grid of stats */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {power.cycleCount != null && (
+            <div className="bg-bg-overlay rounded-lg px-3 py-2.5">
+              <p className="text-xs text-text-muted mb-0.5">Cycle count</p>
+              <p className="text-base font-mono font-semibold text-text-primary">
+                {power.cycleCount}
+              </p>
+              <p className="text-xs text-text-muted mt-0.5">
+                {power.cycleCount < 500 ? 'Healthy' : power.cycleCount < 1000 ? 'Moderate' : 'High'}
+              </p>
+            </div>
+          )}
+
+          {power.maxCapacityMah != null && (
+            <div className="bg-bg-overlay rounded-lg px-3 py-2.5">
+              <p className="text-xs text-text-muted mb-0.5">Max capacity</p>
+              <p className="text-base font-mono font-semibold text-text-primary">
+                {power.maxCapacityMah} mAh
+              </p>
+              {power.designCapacityMah && (
+                <p className="text-xs text-text-muted mt-0.5">
+                  of {power.designCapacityMah} mAh
+                </p>
+              )}
+            </div>
+          )}
+
+          {power.temperatureCelsius != null && (
+            <div className="bg-bg-overlay rounded-lg px-3 py-2.5">
+              <p className="text-xs text-text-muted mb-0.5">Temperature</p>
+              <p className="text-base font-mono font-semibold" style={{ color: tempColor }}>
+                {power.temperatureCelsius.toFixed(1)}°C
+              </p>
+              <p className="text-xs mt-0.5" style={{ color: tempColor }}>
+                {power.temperatureCelsius >= 40 ? 'Hot — check ventilation' :
+                 power.temperatureCelsius >= 35 ? 'Warm' : 'Normal'}
+              </p>
+            </div>
+          )}
+
+          {power.optimizedCharging != null && (
+            <div className="bg-bg-overlay rounded-lg px-3 py-2.5">
+              <p className="text-xs text-text-muted mb-0.5">Optimized charging</p>
+              <div className="mt-1">
+                <HealthBadge
+                  label={power.optimizedCharging ? 'Active' : 'Off'}
+                  ok={power.optimizedCharging}
+                />
+              </div>
+              <p className="text-xs text-text-muted mt-1.5">
+                {power.optimizedCharging ? 'Pauses at 80%' : 'Charging to 100%'}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Open System Settings hint */}
+        <div className="flex items-center justify-between pt-1 border-t border-border-subtle">
+          <p className="text-xs text-text-muted">
+            Apple replaces batteries below 80% health under AppleCare.
+          </p>
+          <button
+            onClick={() => openExternalUrl('x-apple.systempreferences:com.apple.preference.battery')}
+            className="text-xs text-primary hover:text-amber-300 transition-colors shrink-0 ml-3"
+          >
+            System Settings →
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Roadmap ────────────────────────────────────────────────────────────────────
+
+const V1_FEATURES = [
+  { icon: '⚡', label: 'Real-time watts in / out' },
+  { icon: '📊', label: 'Power flow chart (today)' },
+  { icon: '🔌', label: 'Charger & cable detection' },
+  { icon: '📱', label: 'USB device monitoring' },
+  { icon: '🔋', label: 'Battery health panel' },
+  { icon: '🌡️', label: 'Temperature display & alerts' },
+  { icon: '🟢', label: 'Healthy-range indicator (20–80%)' },
+  { icon: '🔔', label: 'Charge-limit notifications (80%)' },
+  { icon: '💡', label: 'Login-item autostart' },
+]
+
+const PRO_FEATURES = [
+  {
+    icon: '🎯',
+    label: 'Custom Charge Limit',
+    desc: 'Stop charging at any % (e.g. 80%) to maximise long-term battery lifespan. Requires writing SMC key CH0B — needs privileged helper process.',
+    tag: 'Pro',
+  },
+  {
+    icon: '⛵',
+    label: 'Sailing Mode',
+    desc: 'Discharge your battery to a target level before reconnecting power. Ideal after long AC sessions to recalibrate.',
+    tag: 'Pro',
+  },
+  {
+    icon: '🔥',
+    label: 'Heat Protection',
+    desc: 'Automatically pause charging when the battery exceeds a temperature threshold to prevent heat degradation.',
+    tag: 'Pro',
+  },
+  {
+    icon: '⬇️',
+    label: 'Discharge Mode',
+    desc: 'Force the Mac to run on battery even when plugged in. Useful for calibration and clearing memory effects.',
+    tag: 'Pro',
+  },
+  {
+    icon: '🔝',
+    label: 'Top Up',
+    desc: 'Temporarily override your charge limit and charge to 100% with one click — for long travel days.',
+    tag: 'Pro',
+  },
+  {
+    icon: '📈',
+    label: 'Export & Reporting',
+    desc: 'Export power history as CSV/JSON. Weekly email summaries, cycle trend graphs, and battery degradation projections.',
+    tag: 'Pro',
+  },
+]
+
+function Roadmap() {
+  return (
+    <div>
+      <SectionHeader title="What's Coming" />
+      <div className="bg-bg-surface border border-border rounded-xl overflow-hidden">
+
+        {/* v1 Free — shipped */}
+        <div className="px-4 pt-4 pb-3 border-b border-border-subtle">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-xs font-semibold uppercase tracking-wider text-success">
+              v1.0 Free — Available Now
+            </span>
+            <span className="text-xs px-1.5 py-0.5 rounded bg-success/15 text-success font-mono">✓ Shipped</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-1.5">
+            {V1_FEATURES.map(f => (
+              <div key={f.label} className="flex items-center gap-2 text-xs text-text-secondary">
+                <span>{f.icon}</span>
+                <span>{f.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* v2 Pro — coming soon */}
+        <div className="px-4 pt-4 pb-4">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xs font-semibold uppercase tracking-wider text-primary">
+              v2.0 Pro — In Development
+            </span>
+            <span className="text-xs px-1.5 py-0.5 rounded bg-primary/15 text-primary font-mono">Coming Soon</span>
+          </div>
+          <p className="text-xs text-text-muted mb-3 leading-relaxed">
+            Pro features require writing to your Mac's SMC (System Management Controller) to directly
+            control charging hardware — the same approach used by apps like AlDente and coconutBattery Pro.
+            This needs a signed privileged helper that runs with elevated permissions,
+            which takes significant engineering effort and Apple notarisation to maintain safely.
+            The Pro tier funds that ongoing development and maintenance.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {PRO_FEATURES.map(f => (
+              <div key={f.label} className="flex items-start gap-3 bg-bg-overlay rounded-lg p-3">
+                <span className="text-lg shrink-0 mt-0.5">{f.icon}</span>
+                <div>
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <span className="text-sm font-medium text-text-primary">{f.label}</span>
+                    <span className="text-xs px-1 py-0.5 rounded bg-primary/15 text-primary font-mono leading-none">
+                      {f.tag}
+                    </span>
+                  </div>
+                  <p className="text-xs text-text-muted leading-relaxed">{f.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Footer CTA */}
+        <div className="px-4 py-3 border-t border-border-subtle bg-bg-overlay/50 flex items-center justify-between flex-wrap gap-2">
+          <p className="text-xs text-text-muted">
+            Interested in Pro features? Let us know — early interest shapes the roadmap.
+          </p>
+          <button
+            onClick={() => openExternalUrl('https://ko-fi.com/slothlabs')}
+            className="text-xs px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/25 text-primary
+                       hover:bg-primary/20 transition-colors shrink-0"
+          >
+            ☕ Support development
+          </button>
         </div>
       </div>
     </div>
@@ -521,24 +845,67 @@ function PowerDataView({ onBack }: { onBack: () => void }) {
         {/* Two columns */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <div>
-            <SectionHeader
-              title="Connected Devices"
-              right={`${power.connectedDevices.length} · ${devWatts.toFixed(1)}W`}
-            />
-            <div className="bg-bg-surface border border-border rounded-xl px-4">
-              {power.connectedDevices.length === 0
-                ? <p className="text-sm text-text-muted py-4 text-center">No USB devices detected</p>
-                : power.connectedDevices.map((d, i) =>
-                    <LiveDeviceRow key={i} device={d} isCharging={power.isCharging} />
-                  )
-              }
-              {!power.isCharging && power.connectedDevices.length > 0 && (
-                <div className="py-2 flex justify-between text-xs border-t border-border-subtle mt-1">
-                  <span className="text-text-muted">Total drain from battery</span>
-                  <span className="font-mono font-semibold text-amber-400">{devWatts.toFixed(1)}W</span>
-                </div>
-              )}
-            </div>
+            {/* Merge live devices + session history into one list.
+                Devices still connected show their live wattage;
+                devices seen earlier today but now disconnected show their
+                accumulated wh from stats.deviceStats. */}
+            {(() => {
+              const liveNames = new Set(power.connectedDevices.map(d => d.name))
+              const disconnected = stats.deviceStats.filter(s => !liveNames.has(s.name))
+              const totalCount = power.connectedDevices.length + disconnected.length
+              const right = power.connectedDevices.length > 0
+                ? `${power.connectedDevices.length} live · ${devWatts.toFixed(1)}W`
+                : totalCount > 0 ? `${totalCount} seen today` : undefined
+              return (
+                <>
+                  <SectionHeader title="Devices" right={right} />
+                  <div className="bg-bg-surface border border-border rounded-xl px-4">
+                    {/* Live connected devices */}
+                    {power.connectedDevices.map((d, i) => (
+                      <LiveDeviceRow key={`live-${i}`} device={d} isCharging={power.isCharging} />
+                    ))}
+
+                    {/* Disconnected devices seen today */}
+                    {disconnected.map((s, i) => (
+                      <div key={`hist-${i}`}
+                        className="flex items-center gap-3 py-2.5 border-b border-border-subtle last:border-0 opacity-55">
+                        <div className="w-7 h-7 rounded-lg bg-bg-overlay flex items-center justify-center shrink-0">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                            <path d="M2 9V6a1 1 0 0 1 1-1h18a1 1 0 0 1 1 1v3M2 15v3a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1v-3M7 12h10"
+                              stroke="#92834a" strokeWidth="1.8" strokeLinecap="round"/>
+                          </svg>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm text-text-secondary truncate">{s.name}</p>
+                            <span className="text-xs px-1.5 py-0.5 rounded bg-bg-overlay text-text-muted font-mono shrink-0">
+                              disconnected
+                            </span>
+                          </div>
+                          {s.manufacturer && (
+                            <p className="text-xs text-text-muted mt-0.5">{s.manufacturer}</p>
+                          )}
+                        </div>
+                        <span className="text-xs font-mono text-text-muted shrink-0">
+                          {s.whDrawn.toFixed(2)} Wh today
+                        </span>
+                      </div>
+                    ))}
+
+                    {power.connectedDevices.length === 0 && disconnected.length === 0 && (
+                      <p className="text-sm text-text-muted py-4 text-center">No USB devices today</p>
+                    )}
+
+                    {!power.isCharging && power.connectedDevices.length > 0 && (
+                      <div className="py-2 flex justify-between text-xs border-t border-border-subtle mt-1">
+                        <span className="text-text-muted">Total drain from battery</span>
+                        <span className="font-mono font-semibold text-amber-400">{devWatts.toFixed(1)}W</span>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )
+            })()}
           </div>
 
           <div>
@@ -570,6 +937,12 @@ function PowerDataView({ onBack }: { onBack: () => void }) {
             )
           }
         </div>
+
+        {/* ── Battery Health ──────────────────────────────────────────────── */}
+        <BatteryHealthPanel power={power} />
+
+        {/* ── Roadmap ─────────────────────────────────────────────────────── */}
+        <Roadmap />
 
       </div>
     </div>

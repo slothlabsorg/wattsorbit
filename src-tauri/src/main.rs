@@ -15,16 +15,19 @@ use tauri::{
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec![]),
+        ))
         .invoke_handler(tauri::generate_handler![
             power::get_power_status,
             history::get_today_stats,
             hide_window,
+            get_autostart,
+            set_autostart,
         ])
         .setup(|app| {
-            // Show popup on all spaces, including fullscreen apps
-            if let Some(win) = app.get_webview_window("main") {
-                let _ = win.set_visible_on_all_workspaces(true);
-            }
+            configure_popup(app);
             setup_tray(app)?;
             start_tray_update_loop(app.handle().clone());
             Ok(())
@@ -33,11 +36,78 @@ fn main() {
         .expect("error while running WattsOrbit");
 }
 
+// ── Popup window configuration ────────────────────────────────────────────────
+
+fn configure_popup(app: &mut tauri::App) {
+    let Some(win) = app.get_webview_window("main") else { return };
+
+    // Visible on all workspaces (sets NSWindowCollectionBehaviorCanJoinAllSpaces)
+    let _ = win.set_visible_on_all_workspaces(true);
+
+    // macOS: set NSStatusWindowLevel (25) + NSWindowCollectionBehaviorFullScreenAuxiliary
+    // so the popup floats above fullscreen app spaces, not just regular desktop spaces.
+    #[cfg(target_os = "macos")]
+    set_macos_popup_level(&win);
+
+    // Auto-hide when the popup loses focus (click outside).
+    // LAST_HIDE_MS debounce (250 ms) prevents the popup immediately re-opening
+    // when the same tray-icon click that dismissed it fires the left-click event.
+    let win_blur = win.clone();
+    win.on_window_event(move |event| {
+        if let tauri::WindowEvent::Focused(false) = event {
+            *LAST_HIDE_MS.lock().unwrap() = now_ms();
+            let _ = win_blur.hide();
+        }
+    });
+}
+
+#[cfg(target_os = "macos")]
+fn set_macos_popup_level(win: &tauri::WebviewWindow) {
+    use objc::{msg_send, sel, sel_impl, runtime::Object};
+    if let Ok(ns_win_ptr) = win.ns_window() {
+        let ns_win = ns_win_ptr as *mut Object;
+        unsafe {
+            // NSStatusWindowLevel = 25  →  floats above fullscreen spaces
+            let _: () = msg_send![ns_win, setLevel: 25_i64];
+            // CanJoinAllSpaces(1) | Transient(8) | IgnoresCycle(64) | FullScreenAuxiliary(256)
+            let behavior: u64 = 1 | 8 | 64 | 256;
+            let _: () = msg_send![ns_win, setCollectionBehavior: behavior];
+        }
+    }
+}
+
+/// Tracks the last time the popup was hidden — used for debounce in tray click.
+static LAST_HIDE_MS: Mutex<u64> = Mutex::new(0);
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
+}
+
 // ── Commands ──────────────────────────────────────────────────────────────────
 
 #[tauri::command]
 fn hide_window(window: tauri::WebviewWindow) {
+    *LAST_HIDE_MS.lock().unwrap() = now_ms();
     let _ = window.hide();
+}
+
+#[tauri::command]
+fn get_autostart(app: tauri::AppHandle) -> bool {
+    use tauri_plugin_autostart::ManagerExt;
+    app.autolaunch().is_enabled().unwrap_or(false)
+}
+
+#[tauri::command]
+fn set_autostart(enabled: bool, app: tauri::AppHandle) -> Result<(), String> {
+    use tauri_plugin_autostart::ManagerExt;
+    if enabled {
+        app.autolaunch().enable().map_err(|e| e.to_string())
+    } else {
+        app.autolaunch().disable().map_err(|e| e.to_string())
+    }
 }
 
 // ── Tray setup ────────────────────────────────────────────────────────────────
@@ -83,7 +153,14 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
                 let Some(window) = app.get_webview_window("main") else { return };
 
                 if window.is_visible().unwrap_or(false) {
+                    *LAST_HIDE_MS.lock().unwrap() = now_ms();
                     let _ = window.hide();
+                    return;
+                }
+
+                // If the window was just hidden by the blur triggered by this
+                // same tray-icon click, skip re-opening (prevents flicker loop).
+                if now_ms().saturating_sub(*LAST_HIDE_MS.lock().unwrap()) < 250 {
                     return;
                 }
 
@@ -101,16 +178,31 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
 
 // ── Notification state ────────────────────────────────────────────────────────
 
+/// Battery percentage at which to alert the user to stop charging.
+const CHARGE_LIMIT_PCT: u8 = 80;
+/// Minutes at or above CHARGE_LIMIT_PCT while charging before sending the sustained alert.
+const HIGH_CHARGE_MINUTES: u64 = 30;
+
 struct NotifState {
-    last_weak_charger:  Option<Instant>,
-    last_low_battery:   Option<Instant>,
-    weak_charger_ticks: u32,
+    last_weak_charger:   Option<Instant>,
+    last_low_battery:    Option<Instant>,
+    last_charge_limit:   Option<Instant>,
+    last_sustained:      Option<Instant>,
+    weak_charger_ticks:  u32,
+    /// When the battery first reached CHARGE_LIMIT_PCT while still charging.
+    high_charge_since:   Option<Instant>,
+    /// True once we've fired the at-limit notification this session (reset on unplug).
+    limit_notified:      bool,
 }
 
 static NOTIF: Mutex<NotifState> = Mutex::new(NotifState {
     last_weak_charger:  None,
     last_low_battery:   None,
+    last_charge_limit:  None,
+    last_sustained:     None,
     weak_charger_ticks: 0,
+    high_charge_since:  None,
+    limit_notified:     false,
 });
 
 const NOTIF_COOLDOWN: Duration = Duration::from_secs(30 * 60); // 30 min between repeats
@@ -144,8 +236,46 @@ fn check_notifications(status: &power::PowerStatus) {
                 st.weak_charger_ticks = 0;
             }
         }
+        // ── Charge-limit reached ──────────────────────────────────────────
+        // Fire once per charging session when battery hits CHARGE_LIMIT_PCT.
+        if status.battery_percent >= CHARGE_LIMIT_PCT && !st.limit_notified
+            && due(st.last_charge_limit)
+        {
+            st.last_charge_limit = Some(now);
+            st.limit_notified = true;
+            notify(
+                "WattsOrbit — Charge limit reached",
+                &format!(
+                    "Battery at {}%. Consider unplugging — staying above 80% long-term accelerates wear.",
+                    status.battery_percent
+                ),
+            );
+        }
+
+        // ── Sustained high charge ─────────────────────────────────────────
+        if status.battery_percent >= CHARGE_LIMIT_PCT {
+            if st.high_charge_since.is_none() { st.high_charge_since = Some(now); }
+            if let Some(since) = st.high_charge_since {
+                let mins = now.duration_since(since).as_secs() / 60;
+                if mins >= HIGH_CHARGE_MINUTES && due(st.last_sustained) {
+                    st.last_sustained = Some(now);
+                    notify(
+                        "WattsOrbit — Still at high charge",
+                        &format!(
+                            "Plugged in above {}% for {} min. Unplug to extend long-term battery life.",
+                            CHARGE_LIMIT_PCT, mins
+                        ),
+                    );
+                }
+            }
+        } else {
+            st.high_charge_since = None;
+        }
     } else {
         st.weak_charger_ticks = 0;
+        // Reset per-session state when unplugged
+        st.limit_notified    = false;
+        st.high_charge_since = None;
 
         // ── Low battery with USB devices draining ─────────────────────────────
         if let Some(mins_left) = status.time_remaining_min {

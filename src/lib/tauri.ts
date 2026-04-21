@@ -1,12 +1,43 @@
 import { invoke } from '@tauri-apps/api/core'
 import type { PowerStatus, TodayStats, PowerSample } from '../types'
 
+// ── External URL helper ───────────────────────────────────────────────────────
+// Uses tauri-plugin-opener in Tauri; falls back to window.open in the browser.
+export async function openExternalUrl(url: string): Promise<void> {
+  try {
+    const { openUrl } = await import('@tauri-apps/plugin-opener')
+    await openUrl(url)
+  } catch {
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }
+}
+
+// ── Autostart helpers ─────────────────────────────────────────────────────────
+export async function getAutoStart(): Promise<boolean> {
+  if (MOCK_MODE) return false
+  return invoke<boolean>('get_autostart')
+}
+
+export async function setAutoStart(enabled: boolean): Promise<void> {
+  if (MOCK_MODE) return
+  return invoke('set_autostart', { enabled })
+}
+
 const MOCK_MODE = (() => {
   try { return new URL(window.location.href).searchParams.get('mock') === '1' }
   catch { return false }
 })()
 
 // ── Mock data ─────────────────────────────────────────────────────────────────
+const MOCK_HEALTH = {
+  cycleCount: 183,
+  temperatureCelsius: 29.5,
+  designCapacityMah: 4382,
+  maxCapacityMah: 4156,
+  healthPercent: 95,
+  optimizedCharging: true,
+}
+
 const MOCK_CHARGING: PowerStatus = {
   isCharging: true,
   chargeState: 'charging',
@@ -23,6 +54,7 @@ const MOCK_CHARGING: PowerStatus = {
     { name: 'Logitech USB Receiver', manufacturer: 'Logitech', currentMa: 100, voltageMv: 5000, speed: 'USB 2.0', isPhone: false, isHub: false },
     { name: 'USB Fan', manufacturer: undefined, currentMa: 800, voltageMv: 5000, speed: 'USB 2.0', isPhone: false, isHub: false },
   ],
+  ...MOCK_HEALTH,
 }
 
 const MOCK_DISCHARGING: PowerStatus = {
@@ -40,6 +72,7 @@ const MOCK_DISCHARGING: PowerStatus = {
     { name: 'USB Mouse', manufacturer: 'Logitech', currentMa: 100, voltageMv: 5000, speed: 'USB 2.0', isPhone: false, isHub: false },
     { name: 'USB Fan', manufacturer: undefined, currentMa: 800, voltageMv: 5000, speed: 'USB 2.0', isPhone: false, isHub: false },
   ],
+  ...MOCK_HEALTH,
 }
 
 // ── Mock history data ─────────────────────────────────────────────────────────

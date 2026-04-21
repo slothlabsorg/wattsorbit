@@ -8,16 +8,20 @@
     "build": "tsc && vite build",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "screenshots": "playwright test --project=screenshots --project=dashboard-screenshots",
+    "test": "playwright test"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.1.1",
     "@tauri-apps/plugin-opener": "^2.5.3",
+    "@tauri-apps/plugin-autostart": "^2.2.0",
     "framer-motion": "^11.3.31",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.44.0",
     "@tauri-apps/cli": "^2.1.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
