@@ -1,11 +1,13 @@
-import { useEffect, useState, useCallback } from 'react'
-import { motion } from 'framer-motion'
+import { useEffect, useState, useCallback, useRef } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import type { PowerStatus } from './types'
 import { formatWatts, formatMinutes, totalDeviceWatts } from './types'
 import { getPowerStatus, hideWindow } from './lib/tauri'
+import { openReport } from './lib/crash'
 import PowerHeader from './components/PowerHeader'
 import BatteryBar from './components/BatteryBar'
 import DeviceList from './components/DeviceList'
+import { UpdateBanner } from './components/UpdateBanner'
 
 const POLL_MS = 5_000
 
@@ -95,6 +97,19 @@ export default function App() {
   const devWatts = status ? totalDeviceWatts(status.connectedDevices) : 0
   const netBalance = status?.wattsIn != null ? status.wattsIn - (status.wattsOut ?? 0) : null
 
+  // ── Charger connection flash ────────────────────────────────────────────────
+  // Brief amber radial glow that plays once when a charger is plugged in.
+  const prevIsCharging = useRef<boolean | null>(null)
+  const [chargerFlash, setChargerFlash] = useState(false)
+  useEffect(() => {
+    if (prevIsCharging.current === false && status?.isCharging === true) {
+      setChargerFlash(true)
+      const t = setTimeout(() => setChargerFlash(false), 850)
+      return () => clearTimeout(t)
+    }
+    if (status != null) prevIsCharging.current = status.isCharging
+  }, [status?.isCharging])
+
   // Status badge label + color
   const badgeLabel = !status ? '' :
     status.chargeState === 'charging'     ? '⚡ Charging' :
@@ -112,9 +127,27 @@ export default function App() {
         initial={{ opacity: 0, scale: 0.96, y: -6 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={{ duration: 0.18, ease: 'easeOut' }}
-        className="w-full bg-bg-elevated rounded-2xl overflow-hidden"
+        className="relative w-full bg-bg-elevated rounded-2xl overflow-hidden"
         style={{ boxShadow: '0 8px 40px rgba(0,0,0,0.65), 0 0 0 1px rgba(245,158,11,0.12)' }}
       >
+        <UpdateBanner />
+        {/* ── Charger-connected flash overlay ──────────────────────────── */}
+        <AnimatePresence>
+          {chargerFlash && (
+            <motion.div
+              key="charger-flash"
+              initial={{ opacity: 0.55 }}
+              animate={{ opacity: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: 'easeOut' }}
+              className="absolute inset-0 pointer-events-none z-50 rounded-2xl"
+              style={{
+                background: 'radial-gradient(ellipse 90% 65% at 50% 45%, rgba(245,158,11,0.38) 0%, transparent 70%)',
+              }}
+            />
+          )}
+        </AnimatePresence>
+
         {/* ── Drag / title bar ─────────────────────────────────────────── */}
         <div
           data-tauri-drag-region
@@ -225,13 +258,20 @@ export default function App() {
               />
             </div>
 
-            {/* Footer: tap to refresh */}
-            <div className="px-4 pt-3 text-center">
+            {/* Footer: refresh + report issue */}
+            <div className="px-4 pt-3 flex items-center justify-between">
               <button
                 onClick={refresh}
                 className="text-xs text-text-muted hover:text-text-secondary transition-colors"
               >
                 Refresh · {new Date(lastUpdate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              </button>
+              <button
+                onClick={() => openReport()}
+                className="text-xs text-text-muted/60 hover:text-text-muted transition-colors"
+                title="Report an issue on GitHub"
+              >
+                Report issue
               </button>
             </div>
           </div>

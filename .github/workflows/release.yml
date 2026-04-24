@@ -44,9 +44,26 @@ jobs:
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # ── Crash reporting ─────────────────────────────────────────────────
+          # Set VITE_SENTRY_DSN in repo Settings → Secrets and variables → Actions
+          # Leave empty / unset to ship without Sentry (app still works normally)
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+          # ── macOS code signing + notarization ────────────────────────────────
+          # Without these the DMG is unsigned → users see "unverified developer"
+          # warning on first launch and must right-click → Open to run it.
+          # Set all six secrets to get a fully signed + notarized release.
+          # See RELEASING.md for instructions on obtaining these values.
+          APPLE_CERTIFICATE:          ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY:     ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID:                   ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD:             ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID:              ${{ secrets.APPLE_TEAM_ID }}
+          TAURI_PRIVATE_KEY:          ${{ secrets.TAURI_PRIVATE_KEY }}
+          TAURI_KEY_PASSWORD:         ${{ secrets.TAURI_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: ${{ github.ref_name }}
+          releaseName: 'WattsOrbit ${{ github.ref_name }}'
           releaseBody: |
             See [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
           releaseDraft: true

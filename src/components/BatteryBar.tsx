@@ -18,7 +18,6 @@ export default function BatteryBar({ percent, isCharging, showHealthZone = true 
   const color   = barColor(percent, isCharging)
   const clamped = Math.max(0, Math.min(100, percent))
 
-  // Healthy zone: 20–80 %
   const ZONE_MIN = 20
   const ZONE_MAX = 80
 
@@ -39,28 +38,42 @@ export default function BatteryBar({ percent, isCharging, showHealthZone = true 
           />
         )}
 
-        {/* Filled bar */}
+        {/* ── Filled bar — overflow-hidden clips effects to the fill area ── */}
         <motion.div
-          className="absolute inset-y-0 left-0 rounded-full"
+          className="absolute inset-y-0 left-0 rounded-full overflow-hidden"
           style={{ backgroundColor: color }}
           initial={{ width: 0 }}
           animate={{ width: `${clamped}%` }}
           transition={{ duration: 0.6, ease: 'easeOut' }}
-        />
+        >
+          {/* Charging shimmer: white light sweeps left → right (energy flowing in) */}
+          {isCharging && (
+            <motion.div
+              className="absolute inset-y-0"
+              style={{
+                width: '55%',
+                backgroundImage: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.52), transparent)',
+              }}
+              initial={{ left: '-55%' }}
+              animate={{ left: '100%' }}
+              transition={{ duration: 1.1, repeat: Infinity, ease: 'linear', repeatDelay: 0.15 }}
+            />
+          )}
 
-        {/* Charging shimmer */}
-        {isCharging && (
-          <motion.div
-            className="absolute inset-y-0 left-0 rounded-full opacity-40"
-            style={{
-              backgroundColor: '#fff',
-              backgroundImage: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.6) 50%, transparent 100%)',
-              backgroundSize: '60% 100%',
-            }}
-            animate={{ backgroundPosition: ['-60% 0', '160% 0'] }}
-            transition={{ duration: 1.4, repeat: Infinity, ease: 'linear' }}
-          />
-        )}
+          {/* Discharge drain: dark shadow sweeps right → left (energy flowing out) */}
+          {!isCharging && clamped > 4 && (
+            <motion.div
+              className="absolute inset-y-0"
+              style={{
+                width: '50%',
+                backgroundImage: 'linear-gradient(90deg, transparent, rgba(0,0,0,0.2), transparent)',
+              }}
+              initial={{ left: '100%' }}
+              animate={{ left: '-50%' }}
+              transition={{ duration: 2.6, repeat: Infinity, ease: 'linear', repeatDelay: 0.6 }}
+            />
+          )}
+        </motion.div>
 
         {/* 80 % limit marker */}
         {showHealthZone && (

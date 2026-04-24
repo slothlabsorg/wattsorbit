@@ -15,6 +15,8 @@ use tauri::{
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec![]),
@@ -72,6 +74,34 @@ fn set_macos_popup_level(win: &tauri::WebviewWindow) {
             // CanJoinAllSpaces(1) | Transient(8) | IgnoresCycle(64) | FullScreenAuxiliary(256)
             let behavior: u64 = 1 | 8 | 64 | 256;
             let _: () = msg_send![ns_win, setCollectionBehavior: behavior];
+        }
+    }
+}
+
+/// Activate the WattsOrbit process and bring the popup to the front.
+///
+/// `window.show()` alone only works when the app is already the frontmost
+/// application.  When the user is in a fullscreen space, the fullscreen app
+/// owns that role, so the popup would silently appear behind it.
+/// Calling `activateIgnoringOtherApps: YES` + `makeKeyAndOrderFront:` first
+/// forces macOS to switch the active application and place the window on the
+/// current space — the same technique used by Alfred, Raycast, and similar
+/// menu-bar popup apps.
+#[cfg(target_os = "macos")]
+fn activate_popup(win: &tauri::WebviewWindow) {
+    use objc::{msg_send, sel, sel_impl, runtime::Object};
+    unsafe {
+        // Bring WattsOrbit to the front even if another app is fullscreen.
+        let cls = objc::runtime::Class::get("NSApplication")
+            .expect("NSApplication class not found");
+        let app: *mut Object = msg_send![cls, sharedApplication];
+        let _: () = msg_send![app, activateIgnoringOtherApps: 1_i8];
+    }
+    if let Ok(ns_win_ptr) = win.ns_window() {
+        let ns_win = ns_win_ptr as *mut Object;
+        unsafe {
+            let nil: *mut Object = std::ptr::null_mut();
+            let _: () = msg_send![ns_win, makeKeyAndOrderFront: nil];
         }
     }
 }
@@ -169,6 +199,10 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
                 let y = position.y + 8.0;
                 let _ = window.set_position(tauri::PhysicalPosition::new(x as i32, y as i32));
                 let _ = window.show();
+                // Activate the app so the popup appears on the current space,
+                // including above fullscreen app spaces.
+                #[cfg(target_os = "macos")]
+                activate_popup(&window);
                 let _ = window.set_focus();
             }
         })

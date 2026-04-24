@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import type { TodayStats, ChargeSession, DeviceStat, PowerSample, PowerStatus } from './types'
 import { deviceWatts, totalDeviceWatts } from './types'
 import { getTodayStats, getPowerStatus, openExternalUrl, setAutoStart } from './lib/tauri'
+import { openReport } from './lib/crash'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const fmtWh   = (wh: number) => `${wh.toFixed(1)} Wh`
@@ -484,6 +485,12 @@ function Landing({ onOpen }: { onOpen: () => void }) {
               className="text-xs text-text-muted hover:text-text-secondary transition-colors"
             >
               GitHub
+            </button>
+            <button
+              onClick={() => openReport()}
+              className="text-xs text-text-muted hover:text-text-secondary transition-colors"
+            >
+              Report issue
             </button>
             <button
               onClick={() => openExternalUrl('https://ko-fi.com/slothlabs')}
