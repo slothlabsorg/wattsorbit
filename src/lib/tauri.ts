@@ -1,11 +1,13 @@
 import { invoke } from '@tauri-apps/api/core'
-import { openUrl } from '@tauri-apps/plugin-opener'
 import type { PowerStatus, TodayStats, PowerSample } from '../types'
 
 // ── External URL helper ───────────────────────────────────────────────────────
+// Uses a Rust `open` subprocess rather than plugin-opener so it works for
+// any scheme (including x-apple.systempreferences:) and avoids the plugin's
+// URL-regex restriction that silently drops some URLs.
 export async function openExternalUrl(url: string): Promise<void> {
   if (MOCK_MODE) { window.open(url, '_blank', 'noopener,noreferrer'); return }
-  await openUrl(url)
+  return invoke('open_external_url', { url })
 }
 
 // Opens macOS System Settings to the Battery pane via a native Rust command

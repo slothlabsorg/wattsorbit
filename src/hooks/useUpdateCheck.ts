@@ -13,6 +13,15 @@ export function useUpdateCheck(): { update: AppUpdate | null; installing: boolea
   useEffect(() => {
     let cancelled = false
     async function run() {
+      // Playwright / browser mock: ?mock_update=X.Y.Z injects a fake pending update.
+      try {
+        const mockVer = new URLSearchParams(window.location.search).get('mock_update')
+        if (mockVer) {
+          setUpdate({ version: mockVer, body: 'Mock update for testing', install: async () => {} })
+          return
+        }
+      } catch {}
+
       try {
         const { check } = await import('@tauri-apps/plugin-updater')
         const result = await check()

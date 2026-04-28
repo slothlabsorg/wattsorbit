@@ -4,6 +4,7 @@ import type { TodayStats, ChargeSession, DeviceStat, PowerSample, PowerStatus } 
 import { deviceWatts, totalDeviceWatts } from './types'
 import { getTodayStats, getPowerStatus, openExternalUrl, openSystemSettings, setAutoStart } from './lib/tauri'
 import { openReport } from './lib/crash'
+import { UpdateBanner } from './components/UpdateBanner'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const fmtWh   = (wh: number) => `${wh.toFixed(1)} Wh`
@@ -804,6 +805,7 @@ function PowerDataView({ onBack }: { onBack: () => void }) {
           <div className="flex items-center gap-3">
             <button
               onClick={onBack}
+              aria-label="Back"
               className="w-7 h-7 rounded-lg bg-bg-surface border border-border flex items-center justify-center
                          text-text-muted hover:text-text-primary transition-colors"
             >
@@ -962,6 +964,8 @@ export default function Dashboard() {
   const [view, setView] = useState<'home' | 'data'>('home')
 
   return (
+    <>
+    <UpdateBanner />
     <AnimatePresence mode="wait">
       {view === 'home' ? (
         <motion.div key="home"
@@ -977,5 +981,6 @@ export default function Dashboard() {
         </motion.div>
       )}
     </AnimatePresence>
+    </>
   )
 }

@@ -26,6 +26,7 @@ fn main() {
             history::get_today_stats,
             hide_window,
             open_system_settings,
+            open_external_url,
             get_autostart,
             set_autostart,
         ])
@@ -42,26 +43,31 @@ fn main() {
 // ── Popup window configuration ────────────────────────────────────────────────
 
 fn configure_popup(app: &mut tauri::App) {
-    let Some(win) = app.get_webview_window("main") else { return };
+    if let Some(win) = app.get_webview_window("main") {
+        let _ = win.set_visible_on_all_workspaces(true);
+        #[cfg(target_os = "macos")]
+        set_macos_popup_level(&win);
 
-    // Visible on all workspaces (sets NSWindowCollectionBehaviorCanJoinAllSpaces)
-    let _ = win.set_visible_on_all_workspaces(true);
+        let win_blur = win.clone();
+        win.on_window_event(move |event| {
+            if let tauri::WindowEvent::Focused(false) = event {
+                *LAST_HIDE_MS.lock().unwrap() = now_ms();
+                let _ = win_blur.hide();
+            }
+        });
+    }
 
-    // macOS: set NSStatusWindowLevel (25) + NSWindowCollectionBehaviorFullScreenAuxiliary
-    // so the popup floats above fullscreen app spaces, not just regular desktop spaces.
-    #[cfg(target_os = "macos")]
-    set_macos_popup_level(&win);
-
-    // Auto-hide when the popup loses focus (click outside).
-    // LAST_HIDE_MS debounce (250 ms) prevents the popup immediately re-opening
-    // when the same tray-icon click that dismissed it fires the left-click event.
-    let win_blur = win.clone();
-    win.on_window_event(move |event| {
-        if let tauri::WindowEvent::Focused(false) = event {
-            *LAST_HIDE_MS.lock().unwrap() = now_ms();
-            let _ = win_blur.hide();
-        }
-    });
+    // Dashboard: prevent destroy on close — hide instead so it can be re-opened
+    // from the tray menu without losing its React state.
+    if let Some(dash) = app.get_webview_window("dashboard") {
+        let dash_hide = dash.clone();
+        dash.on_window_event(move |event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = dash_hide.hide();
+            }
+        });
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -122,11 +128,17 @@ fn hide_window(window: tauri::WebviewWindow) {
 
 #[tauri::command]
 fn open_system_settings() {
-    // x-apple.systempreferences: is blocked by plugin-opener's URL regex, so we
-    // invoke `open` directly from Rust to avoid that restriction.
     let _ = std::process::Command::new("open")
         .arg("x-apple.systempreferences:com.apple.preference.battery")
         .spawn();
+}
+
+#[tauri::command]
+fn open_external_url(url: String) {
+    // Only allow http/https to prevent command injection from any malicious input.
+    if url.starts_with("https://") || url.starts_with("http://") {
+        let _ = std::process::Command::new("open").arg(&url).spawn();
+    }
 }
 
 #[tauri::command]
@@ -203,12 +215,16 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
                 let x = position.x - w / 2.0;
                 let y = position.y + 8.0;
                 let _ = window.set_position(tauri::PhysicalPosition::new(x as i32, y as i32));
-                // activate_popup must run BEFORE show() — it re-applies window level/behavior
-                // and calls makeKeyAndOrderFront: which places the window on the current
-                // fullscreen space. Tauri's show() alone doesn't cross space boundaries.
+                // Set level/behavior BEFORE show so FullScreenAuxiliary is in effect
+                // when the window first appears on a fullscreen space.
+                #[cfg(target_os = "macos")]
+                set_macos_popup_level(&window);
+                let _ = window.show();
+                // Re-apply level + call makeKeyAndOrderFront: AFTER show() because
+                // Tauri's show() resets NSWindow state and the window must already be
+                // visible for makeKeyAndOrderFront: to bring it to the current space.
                 #[cfg(target_os = "macos")]
                 activate_popup(&window);
-                let _ = window.show();
                 let _ = window.set_focus();
             }
         })
