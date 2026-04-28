@@ -63,7 +63,7 @@ test.describe('Dashboard — power data view', () => {
   test('dashboard-data-chart', async ({ page }) => {
     await openDataView(page)
     // Scroll to chart area
-    await page.locator('text=Power Flow').scrollIntoViewIfNeeded()
+    await page.locator('text=Power Flow').first().scrollIntoViewIfNeeded()
     await page.waitForTimeout(300)
     await snap(page, 'dashboard-data-chart')
   })
@@ -84,7 +84,7 @@ test.describe('Dashboard — power data view', () => {
 
   test('dashboard-data-battery-health', async ({ page }) => {
     await openDataView(page)
-    await page.locator('text=Battery Health').scrollIntoViewIfNeeded()
+    await page.locator('text=Battery Health').first().scrollIntoViewIfNeeded()
     await page.waitForTimeout(400)
     await snap(page, 'dashboard-data-battery-health')
   })
