@@ -25,6 +25,7 @@ fn main() {
             power::get_power_status,
             history::get_today_stats,
             hide_window,
+            open_system_settings,
             get_autostart,
             set_autostart,
         ])
@@ -69,8 +70,8 @@ fn set_macos_popup_level(win: &tauri::WebviewWindow) {
     if let Ok(ns_win_ptr) = win.ns_window() {
         let ns_win = ns_win_ptr as *mut Object;
         unsafe {
-            // NSStatusWindowLevel = 25  →  floats above fullscreen spaces
-            let _: () = msg_send![ns_win, setLevel: 25_i64];
+            // NSPopUpMenuWindowLevel - 1 = 100  →  appears above fullscreen app spaces
+            let _: () = msg_send![ns_win, setLevel: 100_i64];
             // CanJoinAllSpaces(1) | Transient(8) | IgnoresCycle(64) | FullScreenAuxiliary(256)
             let behavior: u64 = 1 | 8 | 64 | 256;
             let _: () = msg_send![ns_win, setCollectionBehavior: behavior];
@@ -79,19 +80,14 @@ fn set_macos_popup_level(win: &tauri::WebviewWindow) {
 }
 
 /// Activate the WattsOrbit process and bring the popup to the front.
-///
-/// `window.show()` alone only works when the app is already the frontmost
-/// application.  When the user is in a fullscreen space, the fullscreen app
-/// owns that role, so the popup would silently appear behind it.
-/// Calling `activateIgnoringOtherApps: YES` + `makeKeyAndOrderFront:` first
-/// forces macOS to switch the active application and place the window on the
-/// current space — the same technique used by Alfred, Raycast, and similar
-/// menu-bar popup apps.
+/// Re-applies level/behavior every call because Tauri's show() can reset them.
 #[cfg(target_os = "macos")]
 fn activate_popup(win: &tauri::WebviewWindow) {
+    // Re-apply popup level/behavior — Tauri's hide()/show() can reset NSWindow state.
+    set_macos_popup_level(win);
+
     use objc::{msg_send, sel, sel_impl, runtime::Object};
     unsafe {
-        // Bring WattsOrbit to the front even if another app is fullscreen.
         let cls = objc::runtime::Class::get("NSApplication")
             .expect("NSApplication class not found");
         let app: *mut Object = msg_send![cls, sharedApplication];
@@ -122,6 +118,15 @@ fn now_ms() -> u64 {
 fn hide_window(window: tauri::WebviewWindow) {
     *LAST_HIDE_MS.lock().unwrap() = now_ms();
     let _ = window.hide();
+}
+
+#[tauri::command]
+fn open_system_settings() {
+    // x-apple.systempreferences: is blocked by plugin-opener's URL regex, so we
+    // invoke `open` directly from Rust to avoid that restriction.
+    let _ = std::process::Command::new("open")
+        .arg("x-apple.systempreferences:com.apple.preference.battery")
+        .spawn();
 }
 
 #[tauri::command]
@@ -198,11 +203,12 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
                 let x = position.x - w / 2.0;
                 let y = position.y + 8.0;
                 let _ = window.set_position(tauri::PhysicalPosition::new(x as i32, y as i32));
-                let _ = window.show();
-                // Activate the app so the popup appears on the current space,
-                // including above fullscreen app spaces.
+                // activate_popup must run BEFORE show() — it re-applies window level/behavior
+                // and calls makeKeyAndOrderFront: which places the window on the current
+                // fullscreen space. Tauri's show() alone doesn't cross space boundaries.
                 #[cfg(target_os = "macos")]
                 activate_popup(&window);
+                let _ = window.show();
                 let _ = window.set_focus();
             }
         })

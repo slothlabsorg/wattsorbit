@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { TodayStats, ChargeSession, DeviceStat, PowerSample, PowerStatus } from './types'
 import { deviceWatts, totalDeviceWatts } from './types'
-import { getTodayStats, getPowerStatus, openExternalUrl, setAutoStart } from './lib/tauri'
+import { getTodayStats, getPowerStatus, openExternalUrl, openSystemSettings, setAutoStart } from './lib/tauri'
 import { openReport } from './lib/crash'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -626,7 +626,7 @@ function BatteryHealthPanel({ power }: { power: PowerStatus }) {
             Apple replaces batteries below 80% health under AppleCare.
           </p>
           <button
-            onClick={() => openExternalUrl('x-apple.systempreferences:com.apple.preference.battery')}
+            onClick={() => openSystemSettings()}
             className="text-xs text-primary hover:text-amber-300 transition-colors shrink-0 ml-3"
           >
             System Settings →

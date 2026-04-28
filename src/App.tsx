@@ -205,14 +205,12 @@ export default function App() {
 
             {/* Stats row */}
             <div className="px-4 pb-3 flex gap-2">
-              <StatPill
-                label={status.isCharging ? 'Time to full' : 'Time left'}
-                value={
-                  status.chargeState === 'charged'
-                    ? 'Full'
-                    : formatMinutes(status.isCharging ? status.timeToFullMin : status.timeRemainingMin)
-                }
-              />
+              {status.chargeState !== 'charged' && (
+                <StatPill
+                  label={status.isCharging ? 'Time to full' : 'Time left'}
+                  value={formatMinutes(status.isCharging ? status.timeToFullMin : status.timeRemainingMin)}
+                />
+              )}
               <StatPill
                 label="System draw"
                 value={formatWatts(status.wattsOut)}

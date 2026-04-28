@@ -1,15 +1,18 @@
 import { invoke } from '@tauri-apps/api/core'
+import { openUrl } from '@tauri-apps/plugin-opener'
 import type { PowerStatus, TodayStats, PowerSample } from '../types'
 
 // ── External URL helper ───────────────────────────────────────────────────────
-// Uses tauri-plugin-opener in Tauri; falls back to window.open in the browser.
 export async function openExternalUrl(url: string): Promise<void> {
-  try {
-    const { openUrl } = await import('@tauri-apps/plugin-opener')
-    await openUrl(url)
-  } catch {
-    window.open(url, '_blank', 'noopener,noreferrer')
-  }
+  if (MOCK_MODE) { window.open(url, '_blank', 'noopener,noreferrer'); return }
+  await openUrl(url)
+}
+
+// Opens macOS System Settings to the Battery pane via a native Rust command
+// because the x-apple.systempreferences: URL scheme is blocked by plugin-opener's regex.
+export async function openSystemSettings(): Promise<void> {
+  if (MOCK_MODE) return
+  return invoke('open_system_settings')
 }
 
 // ── Autostart helpers ─────────────────────────────────────────────────────────

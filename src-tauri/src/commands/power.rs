@@ -193,17 +193,21 @@ mod macos {
 
         // ── Charge state from pmset (most reliable) ───────────────────────────
         // pmset line: "-InternalBattery-0 (id=...): 100%; charged; 0:00 remaining"
-        let is_plugged_in       = pmset.contains("'AC Power'");
+        let is_plugged_in        = pmset.contains("'AC Power'");
         let is_actively_charging = pmset.contains("; charging;") || pmset.contains(": charging;");
+        // Only "charged" when pmset explicitly says so — NOT when macOS Optimized Battery Charging
+        // is holding the battery at 80% (pmset then shows "not charging" / "AC attached").
+        let is_explicitly_charged = pmset.contains("; charged;") || pmset.contains(": charged;");
         let charge_state = if !is_plugged_in {
             "discharging"
-        } else if is_actively_charging {
-            "charging"
-        } else {
+        } else if is_explicitly_charged {
             "charged"
+        } else {
+            // includes: actively charging, optimized-charging hold at 80%, AC-attached-not-charging
+            "charging"
         }.to_string();
 
-        // Time remaining when discharging; time to full when charging
+        // Time remaining when discharging; time to full when actively charging
         let pmset_mins = pmset_time(pmset);
         let time_remaining_min = if !is_plugged_in { pmset_mins } else { None };
         let time_to_full_min   = if is_actively_charging { pmset_mins } else { None };
@@ -218,20 +222,22 @@ mod macos {
             .and_then(|w| w.parse().ok());
 
         let raw_desc = adapter_field(ioreg, "Description");
+        let adapter_name = adapter_field(ioreg, "Name"); // set by Apple chargers, empty on 3rd-party
         let adapter_voltage_mv: Option<u32> = adapter_field(ioreg, "AdapterVoltage")
             .and_then(|v| v.parse().ok());
 
-        // Human-readable charger name: "pd charger" → "USB-C PD Charger (65W)"
-        let charger_name = raw_desc.as_deref().map(|d| {
-            if d.eq_ignore_ascii_case("pd charger") || d.is_empty() {
-                match watts_in {
-                    Some(w) => format!("USB-C PD Charger ({:.0}W)", w),
-                    None    => "USB-C PD Charger".to_string(),
+        // Human-readable charger name: prefer Apple's "Name" field, fall back to "Description"
+        let charger_name = adapter_name
+            .filter(|n| !n.is_empty())
+            .or_else(|| raw_desc.as_deref().and_then(|d| {
+                if d.eq_ignore_ascii_case("pd charger") || d.is_empty() {
+                    watts_in.map(|w| format!("USB-C PD Charger ({:.0}W)", w))
+                        .or(Some("USB-C PD Charger".into()))
+                } else {
+                    Some(d.to_string())
                 }
-            } else {
-                d.to_string()
-            }
-        }).or_else(|| watts_in.map(|w| format!("Charger ({:.0}W)", w)));
+            }))
+            .or_else(|| watts_in.map(|w| format!("Charger ({:.0}W)", w)));
 
         // Cable type from adapter voltage
         let cable_type = adapter_voltage_mv.map(|mv| match mv {
@@ -269,9 +275,14 @@ mod macos {
 
         // Design capacity and current max capacity (both in mAh)
         let design_capacity_mah = extract_i64(ioreg, "DesignCapacity").map(|v| v as u32);
-        let max_capacity_mah    = extract_i64(ioreg, "MaxCapacity").map(|v| v as u32);
+        // AppleRawMaxCapacity is in actual mAh on Apple Silicon.
+        // MaxCapacity is 0-100 on Apple Silicon (percentage units), real mAh on Intel.
+        // Use AppleRawMaxCapacity when available for correct mAh display and health %.
+        let max_capacity_mah = extract_i64(ioreg, "AppleRawMaxCapacity")
+            .or_else(|| extract_i64(ioreg, "MaxCapacity"))
+            .map(|v| v as u32);
 
-        // Health = max / design × 100, clamped to 100
+        // Health = actual_max_mah / design_mah × 100
         let health_percent = match (design_capacity_mah, max_capacity_mah) {
             (Some(d), Some(m)) if d > 0 =>
                 Some(((m as f64 / d as f64) * 100.0).clamp(0.0, 100.0) as u8),
