@@ -10,7 +10,8 @@
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
     "screenshots": "playwright test --project=screenshots --project=dashboard-screenshots",
-    "test": "playwright test"
+    "test": "playwright test",
+    "test:native": "node tests/native/dashboard-reopen.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.1.1",

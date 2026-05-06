@@ -46,7 +46,13 @@ fn configure_popup(app: &mut tauri::App) {
     if let Some(win) = app.get_webview_window("main") {
         let _ = win.set_visible_on_all_workspaces(true);
         #[cfg(target_os = "macos")]
-        set_macos_popup_level(&win);
+        {
+            // NSPanel class swap + non-activating style must happen once up-front.
+            // If we did it on every show(), the swap would keep getting re-applied
+            // and we'd risk mid-frame class changes while the window is visible.
+            convert_popup_to_nonactivating_panel(&win);
+            set_macos_popup_level(&win);
+        }
 
         let win_blur = win.clone();
         win.on_window_event(move |event| {
@@ -70,13 +76,25 @@ fn configure_popup(app: &mut tauri::App) {
     }
 }
 
+// Linking the Objective-C runtime function used to swap an NSWindow's class to
+// NSPanel — required to get non-activating behavior so the popup can appear on
+// a fullscreen space without pulling the user out of that space.
+#[cfg(target_os = "macos")]
+extern "C" {
+    fn object_setClass(
+        obj: *mut objc::runtime::Object,
+        cls: *const objc::runtime::Class,
+    ) -> *const objc::runtime::Class;
+}
+
 #[cfg(target_os = "macos")]
 fn set_macos_popup_level(win: &tauri::WebviewWindow) {
     use objc::{msg_send, sel, sel_impl, runtime::Object};
     if let Ok(ns_win_ptr) = win.ns_window() {
         let ns_win = ns_win_ptr as *mut Object;
         unsafe {
-            // NSPopUpMenuWindowLevel - 1 = 100  →  appears above fullscreen app spaces
+            // Level 100 sits just below NSPopUpMenuWindowLevel (101) and above
+            // NSMainMenuWindowLevel (24) — visible over fullscreen app spaces.
             let _: () = msg_send![ns_win, setLevel: 100_i64];
             // CanJoinAllSpaces(1) | Transient(8) | IgnoresCycle(64) | FullScreenAuxiliary(256)
             let behavior: u64 = 1 | 8 | 64 | 256;
@@ -85,13 +103,51 @@ fn set_macos_popup_level(win: &tauri::WebviewWindow) {
     }
 }
 
-/// Activate the WattsOrbit process and bring the popup to the front.
-/// Re-applies level/behavior every call because Tauri's show() can reset them.
+/// Swap the popup NSWindow's class to NSPanel and enable the non-activating
+/// style mask. This is what allows the popup to appear on top of a fullscreen
+/// app's space without activating WattsOrbit (which would otherwise cause
+/// macOS to yank the user out of the fullscreen space to the default space).
+#[cfg(target_os = "macos")]
+fn convert_popup_to_nonactivating_panel(win: &tauri::WebviewWindow) {
+    use objc::{msg_send, sel, sel_impl, runtime::{Class, Object}};
+    let Ok(ns_win_ptr) = win.ns_window() else { return };
+    let ns_win = ns_win_ptr as *mut Object;
+    unsafe {
+        if let Some(panel_cls) = Class::get("NSPanel") {
+            let _ = object_setClass(ns_win, panel_cls as *const Class);
+        }
+        // NSWindowStyleMaskNonactivatingPanel = 1 << 7 = 128. Only meaningful on
+        // NSPanel, which is why we swap the class first. Preserve existing mask.
+        let current_mask: u64 = msg_send![ns_win, styleMask];
+        let _: () = msg_send![ns_win, setStyleMask: current_mask | 128_u64];
+        // Hide from ⌘-Tab and Exposé cycling — it's a transient popup.
+        let _: () = msg_send![ns_win, setHidesOnDeactivate: 0_i8];
+    }
+}
+
+/// Bring the popup to the current space and make it the key window — WITHOUT
+/// activating the WattsOrbit process. Combined with the NSPanel non-activating
+/// style, this lets the popup appear on fullscreen spaces without switching
+/// the user out of them. Re-applies level/behavior because Tauri's show() can
+/// reset NSWindow state.
 #[cfg(target_os = "macos")]
 fn activate_popup(win: &tauri::WebviewWindow) {
-    // Re-apply popup level/behavior — Tauri's hide()/show() can reset NSWindow state.
     set_macos_popup_level(win);
+    use objc::{msg_send, sel, sel_impl, runtime::Object};
+    if let Ok(ns_win_ptr) = win.ns_window() {
+        let ns_win = ns_win_ptr as *mut Object;
+        unsafe {
+            let nil: *mut Object = std::ptr::null_mut();
+            let _: () = msg_send![ns_win, makeKeyAndOrderFront: nil];
+        }
+    }
+}
 
+/// Forcefully bring the dashboard window to the front. Unlike the popup, the
+/// dashboard is a regular managed window — we *do* want app activation and
+/// space transition here (it's how any app's main window behaves when re-opened).
+#[cfg(target_os = "macos")]
+fn activate_dashboard(win: &tauri::WebviewWindow) {
     use objc::{msg_send, sel, sel_impl, runtime::Object};
     unsafe {
         let cls = objc::runtime::Class::get("NSApplication")
@@ -182,7 +238,13 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
         .on_menu_event(|app, event| match event.id().as_ref() {
             "dashboard" => {
                 if let Some(window) = app.get_webview_window("dashboard") {
+                    // unminimize first — after CloseRequested+prevent_close+hide,
+                    // macOS sometimes leaves the window in a miniaturized-like state
+                    // where a bare show() won't bring it back to the active space.
+                    let _ = window.unminimize();
                     let _ = window.show();
+                    #[cfg(target_os = "macos")]
+                    activate_dashboard(&window);
                     let _ = window.set_focus();
                 }
             }
