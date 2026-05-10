@@ -580,59 +580,98 @@ mod linux {
 #[cfg(target_os = "windows")]
 mod windows {
     use super::*;
+    use std::os::windows::process::CommandExt;
 
-    const PS_BATTERY: &str = r#"
-$b = Get-WmiObject Win32_Battery | Select-Object BatteryStatus, EstimatedChargeRemaining, EstimatedRunTime
-$a = Get-WmiObject -Namespace 'root/wmi' -Class BatteryStatus | Select-Object Charging, Discharging, PowerOnline, Voltage, Current
-$result = @{
-    BatteryStatus = $b.BatteryStatus
-    Percent = $b.EstimatedChargeRemaining
-    RunTime = $b.EstimatedRunTime
-    Charging = if ($a) { $a.Charging } else { $false }
-    Voltage  = if ($a) { $a.Voltage  } else { 0 }
-    Current  = if ($a) { $a.Current  } else { 0 }
+    /// Windows CreateProcess flag that prevents a console window from flashing
+    /// when we spawn `powershell.exe` for WMI queries. Without this the user
+    /// sees a black cmd window pop up every 10 s from the background loop.
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+    /// One consolidated PowerShell call that dumps battery + health + USB in
+    /// a single child-process spawn. Runs every 10 s, so collapsing 3 spawns
+    /// into 1 meaningfully reduces CPU + startup cost.
+    ///
+    /// Uses Get-CimInstance (modern, faster than Get-WmiObject) and wraps
+    /// every query in try/catch so a missing WMI class on older Windows
+    /// doesn't abort the whole script.
+    const PS_ALL: &str = r#"
+$ErrorActionPreference = 'SilentlyContinue'
+function tc($block) { try { & $block } catch { $null } }
+
+$b = tc { Get-CimInstance Win32_Battery | Select-Object -First 1 }
+$a = tc { Get-CimInstance -Namespace 'root/wmi' -ClassName BatteryStatus | Select-Object -First 1 }
+$s = tc { Get-CimInstance -Namespace 'root/wmi' -ClassName BatteryStaticData | Select-Object -First 1 }
+$f = tc { Get-CimInstance -Namespace 'root/wmi' -ClassName BatteryFullChargedCapacity | Select-Object -First 1 }
+$c = tc { Get-CimInstance -Namespace 'root/wmi' -ClassName BatteryCycleCount | Select-Object -First 1 }
+$usb = tc {
+  Get-PnpDevice -Class USB -Status OK |
+    Where-Object { $_.FriendlyName -notmatch 'Hub|Host|Root|Controller' } |
+    Select-Object FriendlyName, Manufacturer
 }
-$result | ConvertTo-Json
+
+@{
+  Percent       = if ($b) { [int]$b.EstimatedChargeRemaining } else { 0 }
+  RunTime       = if ($b) { [int]$b.EstimatedRunTime } else { 65535 }
+  Charging      = if ($a) { [bool]$a.Charging } else { $false }
+  Voltage       = if ($a) { [double]$a.Voltage } else { 0 }
+  Current       = if ($a) { [double]$a.DischargeRate } else { 0 }
+  DesignCap     = if ($s) { [int]$s.DesignedCapacity } else { 0 }
+  FullCap       = if ($f) { [int]$f.FullChargedCapacity } else { 0 }
+  CycleCount    = if ($c) { [int]$c.CycleCount } else { 0 }
+  Usb           = if ($usb) { @($usb) } else { @() }
+} | ConvertTo-Json -Depth 4 -Compress
 "#;
 
-    pub fn fetch() -> PowerStatus {
-        let output = Command::new("powershell")
-            .args(["-NoProfile", "-NonInteractive", "-Command", PS_BATTERY])
-            .output();
+    fn run_ps(script: &str) -> Option<String> {
+        let out = Command::new("powershell")
+            .args(["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", script])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .ok()?;
+        if !out.status.success() { return None; }
+        Some(String::from_utf8_lossy(&out.stdout).into_owned())
+    }
 
-        let Ok(out) = output else {
+    pub fn fetch() -> PowerStatus {
+        let Some(text) = run_ps(PS_ALL) else {
             return PowerStatus { error: Some("PowerShell unavailable".into()), ..Default::default() };
         };
-
-        let text = String::from_utf8_lossy(&out.stdout);
         let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) else {
             return PowerStatus { error: Some("Could not parse battery info".into()), ..Default::default() };
         };
 
-        let percent  = json["Percent"].as_u64().unwrap_or(0) as u8;
+        let percent  = json["Percent"].as_u64().unwrap_or(0).min(100) as u8;
         let charging = json["Charging"].as_bool().unwrap_or(false);
+        // 65535 is WMI's "unknown" sentinel — treat as None
         let run_time = json["RunTime"].as_u64().filter(|&v| v < 65534);
 
-        // Voltage in mV, Current in mA (WMI reports in those units)
-        let voltage  = json["Voltage"].as_f64().unwrap_or(0.0);
-        let current  = json["Current"].as_f64().unwrap_or(0.0).abs();
-        let watts_out = if voltage > 0.0 && current > 0.0 {
-            Some(voltage * current / 1_000.0) // mV * mA / 1000 = W ... but WMI units vary
-        } else { None };
-
-        let connected_devices = get_usb_devices();
+        // BatteryStatus reports mW directly in DischargeRate on most modern laptops.
+        // When we can't get that, fall back to V×I. WMI voltage is mV; "Current" here
+        // actually holds DischargeRate in mW for robustness across drivers.
+        let voltage_mv = json["Voltage"].as_f64().unwrap_or(0.0);
+        let mw         = json["Current"].as_f64().unwrap_or(0.0).abs();
+        let watts_out  = if mw > 100.0 {
+            Some(mw / 1000.0)
+        } else if voltage_mv > 0.0 && mw > 0.0 {
+            Some((voltage_mv * mw) / 1_000_000.0)
+        } else {
+            None
+        };
 
         let charge_state = if !charging { "discharging" }
             else if percent >= 100 { "charged" }
             else { "charging" }.to_string();
 
-        // Battery health via WMI BatteryStaticData + BatteryFullChargedCapacity
-        let (design_capacity_mah, max_capacity_mah, cycle_count) = get_battery_health();
+        let design_capacity_mah = json["DesignCap"].as_u64().filter(|&v| v > 0).map(|v| v as u32);
+        let max_capacity_mah    = json["FullCap"].as_u64().filter(|&v| v > 0).map(|v| v as u32);
+        let cycle_count         = json["CycleCount"].as_u64().filter(|&v| v > 0).map(|v| v as u32);
         let health_percent = match (design_capacity_mah, max_capacity_mah) {
             (Some(d), Some(m)) if d > 0 =>
                 Some(((m as f64 / d as f64) * 100.0).clamp(0.0, 100.0) as u8),
             _ => None,
         };
+
+        let connected_devices = parse_usb(&json["Usb"]);
 
         PowerStatus {
             is_charging: charging,
@@ -655,57 +694,20 @@ $result | ConvertTo-Json
         }
     }
 
-    fn get_battery_health() -> (Option<u32>, Option<u32>, Option<u32>) {
-        const PS: &str = r#"
-$s = Get-WmiObject -Namespace 'root/wmi' -Class BatteryStaticData -ErrorAction SilentlyContinue | Select-Object -First 1
-$f = Get-WmiObject -Namespace 'root/wmi' -Class BatteryFullChargedCapacity -ErrorAction SilentlyContinue | Select-Object -First 1
-$c = Get-WmiObject -Namespace 'root/wmi' -Class BatteryCycleCount -ErrorAction SilentlyContinue | Select-Object -First 1
-@{
-  DesignCapacity = if ($s) { $s.DesignedCapacity } else { 0 }
-  FullCapacity   = if ($f) { $f.FullChargedCapacity } else { 0 }
-  CycleCount     = if ($c) { $c.CycleCount } else { 0 }
-} | ConvertTo-Json
-"#;
-        let Ok(out) = Command::new("powershell")
-            .args(["-NoProfile", "-NonInteractive", "-Command", PS])
-            .output()
-        else { return (None, None, None) };
-
-        let text = String::from_utf8_lossy(&out.stdout);
-        let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) else {
-            return (None, None, None);
-        };
-        let design = json["DesignCapacity"].as_u64().filter(|&v| v > 0).map(|v| v as u32);
-        let full   = json["FullCapacity"].as_u64().filter(|&v| v > 0).map(|v| v as u32);
-        let cycles = json["CycleCount"].as_u64().filter(|&v| v > 0).map(|v| v as u32);
-        (design, full, cycles)
-    }
-
-    fn get_usb_devices() -> Vec<UsbDevice> {
-        const PS_USB: &str = r#"
-Get-PnpDevice -Class USB -Status OK |
-  Where-Object { $_.FriendlyName -notmatch 'Hub|Host|Root|Controller' } |
-  Select-Object FriendlyName, Manufacturer |
-  ConvertTo-Json
-"#;
-        let Ok(out) = Command::new("powershell")
-            .args(["-NoProfile", "-NonInteractive", "-Command", PS_USB])
-            .output()
-        else { return vec![]; };
-
-        let text = String::from_utf8_lossy(&out.stdout);
-        let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) else { return vec![]; };
-
-        let items = if json.is_array() {
-            json.as_array().cloned().unwrap_or_default()
+    fn parse_usb(val: &serde_json::Value) -> Vec<UsbDevice> {
+        let items: Vec<&serde_json::Value> = if val.is_array() {
+            val.as_array().map(|a| a.iter().collect()).unwrap_or_default()
+        } else if val.is_object() {
+            vec![val]
         } else {
-            vec![json]
+            vec![]
         };
 
         items.into_iter().filter_map(|item| {
             let name = item["FriendlyName"].as_str()?.to_string();
             let mfr  = item["Manufacturer"].as_str().map(|s| s.to_string());
-            let is_phone = name.to_lowercase().contains("iphone") || name.to_lowercase().contains("android");
+            let lower = name.to_lowercase();
+            let is_phone = lower.contains("iphone") || lower.contains("android");
             Some(UsbDevice {
                 name,
                 manufacturer: mfr,

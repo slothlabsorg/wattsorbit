@@ -182,6 +182,21 @@ fn hide_window(window: tauri::WebviewWindow) {
     let _ = window.hide();
 }
 
+/// Windows: spawn a detached child process without flashing a console window.
+/// Without CREATE_NO_WINDOW every call to `powershell.exe` / `cmd.exe` pops
+/// a black console for a few frames — very visible in a background loop that
+/// ticks every 10 s.
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+#[cfg(target_os = "windows")]
+fn silent_command(program: &str) -> std::process::Command {
+    use std::os::windows::process::CommandExt;
+    let mut cmd = std::process::Command::new(program);
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    cmd
+}
+
 #[tauri::command]
 fn open_system_settings() {
     #[cfg(target_os = "macos")]
@@ -190,9 +205,14 @@ fn open_system_settings() {
         .spawn();
 
     #[cfg(target_os = "windows")]
-    let _ = std::process::Command::new("cmd")
-        .args(["/C", "start", "ms-settings:batterysaver"])
-        .spawn();
+    {
+        // `explorer.exe ms-settings:...` opens the Settings app directly and
+        // exits immediately — no cmd wrapper, no visible window, and no need
+        // to pipe through `start` which would flash cmd before launching.
+        let _ = silent_command("explorer")
+            .arg("ms-settings:batterysaver")
+            .spawn();
+    }
 
     #[cfg(target_os = "linux")]
     {
@@ -223,9 +243,12 @@ fn open_external_url(url: String) {
     let _ = std::process::Command::new("open").arg(&url).spawn();
 
     #[cfg(target_os = "windows")]
-    let _ = std::process::Command::new("cmd")
-        .args(["/C", "start", "", &url])
-        .spawn();
+    {
+        // explorer.exe handles http(s) via the user's default-browser handler
+        // without flashing a console — cmd /C start would otherwise show a
+        // brief black window before spawning the browser.
+        let _ = silent_command("explorer").arg(&url).spawn();
+    }
 
     #[cfg(target_os = "linux")]
     let _ = std::process::Command::new("xdg-open").arg(&url).spawn();
@@ -259,9 +282,17 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
         .item(&quit)
         .build()?;
 
-    let tray_icon = tauri::image::Image::from_path(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("icons/tray.png")
-    ).unwrap_or_else(|_| app.default_window_icon().unwrap().clone());
+    // Embed tray icon bytes at compile time — a runtime path lookup via
+    // CARGO_MANIFEST_DIR would resolve to the build machine's path and fail
+    // on any user machine. `from_bytes` decodes the PNG; if that somehow
+    // fails (shouldn't — we control the asset) we fall back to the default
+    // window icon, defaulting to a 16×16 transparent pixel if even that's
+    // missing so we never panic on startup.
+    const TRAY_PNG: &[u8] = include_bytes!("../icons/tray.png");
+    let tray_icon = tauri::image::Image::from_bytes(TRAY_PNG)
+        .ok()
+        .or_else(|| app.default_window_icon().cloned())
+        .unwrap_or_else(|| tauri::image::Image::new_owned(vec![0; 16 * 16 * 4], 16, 16));
 
     TrayIconBuilder::with_id("watts-tray")
         .icon(tray_icon)
@@ -481,11 +512,14 @@ fn notify(title: &str, body: &str) {
 
 #[cfg(target_os = "windows")]
 fn notify(title: &str, body: &str) {
-    // Escape single quotes for the PowerShell single-quoted literal. Anything
-    // else (including XML-special chars) is dropped into a CDATA-equivalent via
-    // the raw toast XML template.
-    let t = title.replace('\'', "''");
-    let b = body.replace('\'', "''");
+    // Escape XML-special chars so raw toast template stays well-formed, then
+    // escape single quotes for the PowerShell single-quoted literal that
+    // wraps LoadXml's argument.
+    fn xml_escape(s: &str) -> String {
+        s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
+    }
+    let t = xml_escape(title).replace('\'', "''");
+    let b = xml_escape(body).replace('\'', "''");
     let script = format!(r#"
 [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
 $xml = [Windows.Data.Xml.Dom.XmlDocument]::new()
@@ -493,8 +527,8 @@ $xml.LoadXml('<toast><visual><binding template="ToastGeneric"><text>{t}</text><t
 $toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
 [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('WattsOrbit').Show($toast)
 "#);
-    let _ = std::process::Command::new("powershell")
-        .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+    let _ = silent_command("powershell")
+        .args(["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", &script])
         .spawn();
 }
 
