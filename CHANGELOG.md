@@ -7,9 +7,10 @@ this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [1.0.0] — 2026-05-09
+## [1.0.0] — 2026-05-10
 
-First public release of WattsOrbit — a menu-bar power monitor for macOS.
+First public release of WattsOrbit — a cross-platform tray power monitor for
+macOS, Windows, and Linux.
 
 ### New Features
 
@@ -49,9 +50,38 @@ First public release of WattsOrbit — a menu-bar power monitor for macOS.
   without leaving the app.
 - Crash reporting scaffolding wired in so we can triage issues shipped
   to real users.
-- Release workflow produces signed macOS builds for both Apple Silicon
-  (`aarch64-apple-darwin`) and Intel (`x86_64-apple-darwin`) via
-  `tauri-apps/tauri-action`.
+- Release workflow produces builds for four targets on every tag via
+  `tauri-apps/tauri-action`: macOS Apple Silicon (`aarch64-apple-darwin`),
+  macOS Intel (`x86_64-apple-darwin`), Linux x86_64 (`.deb` + `.AppImage`
+  on `ubuntu-22.04`), and Windows x86_64 (`.msi` + `.nsis-setup.exe`).
+- CI (`ci.yml`) runs `cargo check` + `cargo test` on `macos-latest`,
+  `ubuntu-22.04`, and `windows-latest` — regressions on any OS block `main`.
+
+**Windows support**
+- Battery data via WMI: `Win32_Battery` for %/state/runtime, plus
+  `BatteryStaticData`, `BatteryFullChargedCapacity`, `BatteryCycleCount`
+  from `root/wmi` for battery-health fields (cycle count, design vs current
+  capacity, health %).
+- USB devices enumerated via `Get-PnpDevice -Class USB`, hub/controller
+  entries filtered out.
+- Native toasts via `Windows.UI.Notifications` (raw `ToastGeneric` XML).
+- "Open System Settings" opens `ms-settings:batterysaver` via `cmd /C start`.
+- External links open through the Windows shell (`cmd /C start ""`).
+
+**Linux support**
+- Battery data via `/sys/class/power_supply/BAT*`: `capacity`, `status`,
+  `power_now`, `energy_now` for runtime; `cycle_count`, `charge_full_design`,
+  `charge_full`, `temp` for battery health.
+- AC detection via `/sys/class/power_supply/AC/online`.
+- USB devices via `lsusb` (hubs filtered out).
+- Notifications via `notify-send` (libnotify).
+- "Open System Settings" tries `gnome-control-center power`,
+  `systemsettings5 powerdevilglobalconfig`, then falls back to `xdg-open`.
+- External links via `xdg-open`.
+
+All three platforms share the same `PowerStatus` payload and React UI —
+platform-specific code lives behind `#[cfg(target_os = ...)]` gates in
+`src-tauri/src/commands/power.rs` and `src-tauri/src/main.rs`.
 
 **Testing**
 - Playwright screenshot suite for the popup and dashboard, plus an
@@ -74,6 +104,14 @@ First public release of WattsOrbit — a menu-bar power monitor for macOS.
 
 ### Known limitations
 
-- macOS only in this release. Windows / Linux support is on the roadmap.
+- Artifacts are unsigned on all three platforms — macOS shows "unverified
+  developer", Windows shows SmartScreen, Linux has no equivalent gate.
+  Signing/notarization secrets wiring is a follow-up.
+- Windows and Linux builds are shipping as a first pass — the Rust backend,
+  CI, and installer pipeline are in place but real-device smoke-testing
+  (tray icon contrast, notification behaviour across desktop environments,
+  tray click-to-popup geometry) is ongoing. Please file issues.
+- Linux tray requires AppIndicator support — on vanilla GNOME users need
+  the AppIndicator extension for the icon to appear.
 
 [1.0.0]: https://github.com/slothlabsorg/wattsorbit/releases/tag/v1.0.0

@@ -1,9 +1,11 @@
 # Release Process — SlothLabs Orbit Apps
 
 This document covers the full release process for WattsOrbit and all other Orbit apps
-(`dataorbit`, `bastionorbit`, `proxyorbit`). The pipeline is identical across all four;
-the only difference is that WattsOrbit builds macOS only, while the others build
-macOS + Windows + Linux.
+(`dataorbit`, `bastionorbit`, `proxyorbit`). The pipeline is identical across all four
+and produces macOS + Windows + Linux artifacts on every tag.
+
+Until v1.0 WattsOrbit shipped macOS-only; from v1.1 onward the release matrix also
+produces `.msi`/`.nsis-setup.exe` on Windows and `.deb`/`.AppImage` on Linux.
 
 ---
 
@@ -15,8 +17,7 @@ It never runs on regular commits or branches.
 When a tag is pushed:
 
 1. GitHub Actions spins up one runner per target platform/architecture:
-   - **WattsOrbit**: 2 runners — Apple Silicon + Intel
-   - **Others**: 4 runners — Apple Silicon, Intel, Windows, Ubuntu
+   - 4 runners — Apple Silicon (macOS), Intel (macOS), Windows (x86_64), Ubuntu 22.04 (x86_64)
 2. Each runner installs Node 20, Rust stable, and `npm ci`
 3. `tauri-apps/tauri-action` builds the Tauri app:
    - **macOS**: produces `AppName_x.y.z_aarch64.dmg` and `AppName_x.y.z_x64.dmg`
@@ -219,8 +220,19 @@ git push origin v0.2.0
 
 ---
 
-## WattsOrbit-specific: macOS-only
+## WattsOrbit-specific: platform notes
 
-WattsOrbit uses macOS private APIs for battery/USB power data and cannot run on
-Windows or Linux. The release matrix only includes `aarch64-apple-darwin` and
-`x86_64-apple-darwin`. Do not add Windows/Linux targets to this app.
+- **macOS** — `macOSPrivateApi: true` enables the NSPanel non-activating popup
+  so the tray panel floats over fullscreen spaces without pulling the user
+  out. Requires `tauri` `macos-private-api` feature (already set in
+  `src-tauri/Cargo.toml`). Battery data comes from `pmset` + `ioreg`.
+- **Windows** — battery via WMI (`Win32_Battery`, `BatteryFullChargedCapacity`,
+  `BatteryCycleCount`). USB via `Get-PnpDevice -Class USB`. Toast notifications
+  via `Windows.UI.Notifications`. WebView2 runtime is required on the user's
+  machine (pre-installed on Windows 11, shipped via the MSI on Windows 10).
+- **Linux** — battery via `/sys/class/power_supply/BAT*`. USB via `lsusb`.
+  Notifications via `notify-send` (libnotify). Tray via AppIndicator — on
+  GNOME users need the AppIndicator extension for the icon to show.
+- CI builds all three OSes on every push; a Linux-only regression will block
+  `main` the same way a macOS one does. Keep platform-specific code gated
+  behind `#[cfg(target_os = "...")]` so `cargo check` stays fast per platform.

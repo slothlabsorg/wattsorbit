@@ -184,17 +184,51 @@ fn hide_window(window: tauri::WebviewWindow) {
 
 #[tauri::command]
 fn open_system_settings() {
+    #[cfg(target_os = "macos")]
     let _ = std::process::Command::new("open")
         .arg("x-apple.systempreferences:com.apple.preference.battery")
         .spawn();
+
+    #[cfg(target_os = "windows")]
+    let _ = std::process::Command::new("cmd")
+        .args(["/C", "start", "ms-settings:batterysaver"])
+        .spawn();
+
+    #[cfg(target_os = "linux")]
+    {
+        // Try GNOME, then KDE, then a generic xdg fallback. First one that
+        // actually launches wins; later attempts are harmless if earlier ones
+        // succeeded since each spawns a detached child.
+        let attempts: &[(&str, &[&str])] = &[
+            ("gnome-control-center", &["power"]),
+            ("systemsettings5",      &["powerdevilglobalconfig"]),
+            ("xdg-open",             &["settings://power"]),
+        ];
+        for (cmd, args) in attempts {
+            if std::process::Command::new(cmd).args(*args).spawn().is_ok() {
+                break;
+            }
+        }
+    }
 }
 
 #[tauri::command]
 fn open_external_url(url: String) {
     // Only allow http/https to prevent command injection from any malicious input.
-    if url.starts_with("https://") || url.starts_with("http://") {
-        let _ = std::process::Command::new("open").arg(&url).spawn();
+    if !(url.starts_with("https://") || url.starts_with("http://")) {
+        return;
     }
+
+    #[cfg(target_os = "macos")]
+    let _ = std::process::Command::new("open").arg(&url).spawn();
+
+    #[cfg(target_os = "windows")]
+    let _ = std::process::Command::new("cmd")
+        .args(["/C", "start", "", &url])
+        .spawn();
+
+    #[cfg(target_os = "linux")]
+    let _ = std::process::Command::new("xdg-open").arg(&url).spawn();
 }
 
 #[tauri::command]
@@ -436,8 +470,33 @@ fn notify(title: &str, body: &str) {
         .spawn();
 }
 
-#[cfg(not(target_os = "macos"))]
-fn notify(_title: &str, _body: &str) { /* TODO: Linux/Windows */ }
+#[cfg(target_os = "linux")]
+fn notify(title: &str, body: &str) {
+    // Most Linux desktops ship `notify-send` (libnotify). If it's absent the
+    // call silently no-ops, which is the right UX for a best-effort toast.
+    let _ = std::process::Command::new("notify-send")
+        .args(["-a", "WattsOrbit", "-i", "battery", title, body])
+        .spawn();
+}
+
+#[cfg(target_os = "windows")]
+fn notify(title: &str, body: &str) {
+    // Escape single quotes for the PowerShell single-quoted literal. Anything
+    // else (including XML-special chars) is dropped into a CDATA-equivalent via
+    // the raw toast XML template.
+    let t = title.replace('\'', "''");
+    let b = body.replace('\'', "''");
+    let script = format!(r#"
+[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
+$xml = [Windows.Data.Xml.Dom.XmlDocument]::new()
+$xml.LoadXml('<toast><visual><binding template="ToastGeneric"><text>{t}</text><text>{b}</text></binding></visual></toast>')
+$toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
+[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('WattsOrbit').Show($toast)
+"#);
+    let _ = std::process::Command::new("powershell")
+        .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+        .spawn();
+}
 
 // ── Background loop ───────────────────────────────────────────────────────────
 

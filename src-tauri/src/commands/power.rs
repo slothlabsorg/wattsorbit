@@ -511,6 +511,26 @@ mod linux {
             "charging"
         }.to_string();
 
+        // Battery health (Linux exposes these in /sys/class/power_supply/BAT*)
+        let cycle_count: Option<u32> = read_file(&format!("{bat}/cycle_count"))
+            .and_then(|s| s.parse().ok());
+        // Temperature is typically in tenths of °C
+        let temperature_celsius: Option<f64> = read_file(&format!("{bat}/temp"))
+            .and_then(|s| s.parse::<i64>().ok())
+            .map(|t| t as f64 / 10.0);
+        // charge_full_design and charge_full are in µAh → mAh
+        let design_capacity_mah: Option<u32> = read_file(&format!("{bat}/charge_full_design"))
+            .and_then(|s| s.parse::<u64>().ok())
+            .map(|uah| (uah / 1000) as u32);
+        let max_capacity_mah: Option<u32> = read_file(&format!("{bat}/charge_full"))
+            .and_then(|s| s.parse::<u64>().ok())
+            .map(|uah| (uah / 1000) as u32);
+        let health_percent = match (design_capacity_mah, max_capacity_mah) {
+            (Some(d), Some(m)) if d > 0 =>
+                Some(((m as f64 / d as f64) * 100.0).clamp(0.0, 100.0) as u8),
+            _ => None,
+        };
+
         PowerStatus {
             is_charging: ac_online,
             charge_state,
@@ -523,6 +543,12 @@ mod linux {
             cable_type: None,
             connected_devices,
             error: None,
+            cycle_count,
+            temperature_celsius,
+            design_capacity_mah,
+            max_capacity_mah,
+            health_percent,
+            optimized_charging: None,
         }
     }
 
@@ -600,6 +626,14 @@ $result | ConvertTo-Json
             else if percent >= 100 { "charged" }
             else { "charging" }.to_string();
 
+        // Battery health via WMI BatteryStaticData + BatteryFullChargedCapacity
+        let (design_capacity_mah, max_capacity_mah, cycle_count) = get_battery_health();
+        let health_percent = match (design_capacity_mah, max_capacity_mah) {
+            (Some(d), Some(m)) if d > 0 =>
+                Some(((m as f64 / d as f64) * 100.0).clamp(0.0, 100.0) as u8),
+            _ => None,
+        };
+
         PowerStatus {
             is_charging: charging,
             charge_state,
@@ -612,7 +646,39 @@ $result | ConvertTo-Json
             cable_type: None,
             connected_devices,
             error: None,
+            cycle_count,
+            temperature_celsius: None,
+            design_capacity_mah,
+            max_capacity_mah,
+            health_percent,
+            optimized_charging: None,
         }
+    }
+
+    fn get_battery_health() -> (Option<u32>, Option<u32>, Option<u32>) {
+        const PS: &str = r#"
+$s = Get-WmiObject -Namespace 'root/wmi' -Class BatteryStaticData -ErrorAction SilentlyContinue | Select-Object -First 1
+$f = Get-WmiObject -Namespace 'root/wmi' -Class BatteryFullChargedCapacity -ErrorAction SilentlyContinue | Select-Object -First 1
+$c = Get-WmiObject -Namespace 'root/wmi' -Class BatteryCycleCount -ErrorAction SilentlyContinue | Select-Object -First 1
+@{
+  DesignCapacity = if ($s) { $s.DesignedCapacity } else { 0 }
+  FullCapacity   = if ($f) { $f.FullChargedCapacity } else { 0 }
+  CycleCount     = if ($c) { $c.CycleCount } else { 0 }
+} | ConvertTo-Json
+"#;
+        let Ok(out) = Command::new("powershell")
+            .args(["-NoProfile", "-NonInteractive", "-Command", PS])
+            .output()
+        else { return (None, None, None) };
+
+        let text = String::from_utf8_lossy(&out.stdout);
+        let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) else {
+            return (None, None, None);
+        };
+        let design = json["DesignCapacity"].as_u64().filter(|&v| v > 0).map(|v| v as u32);
+        let full   = json["FullCapacity"].as_u64().filter(|&v| v > 0).map(|v| v as u32);
+        let cycles = json["CycleCount"].as_u64().filter(|&v| v > 0).map(|v| v as u32);
+        (design, full, cycles)
     }
 
     fn get_usb_devices() -> Vec<UsbDevice> {
