@@ -40,9 +40,16 @@ Grab the latest `.dmg` from the [Releases](https://github.com/slothlabsorg/watts
 
 First launch will show "unverified developer" (the app isn't notarized yet). Right-click → **Open** → **Open** once to trust it.
 
+### macOS (Homebrew)
+
 ```bash
-# Homebrew — coming soon
-brew install slothlabs/tap/wattsorbit
+brew install --cask slothlabsorg/tap/wattsorbit
+```
+
+The cask in [slothlabsorg/homebrew-tap](https://github.com/slothlabsorg/homebrew-tap) is auto-updated on every published release — no manual bumps required. Because the build is unsigned, Gatekeeper quarantines the app on first launch. Run once to trust it:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/WattsOrbit.app
 ```
 
 ### Windows

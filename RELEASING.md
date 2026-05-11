@@ -70,6 +70,22 @@ Do this for each repo separately (secrets are per-repo).
 |--------|-------|-------|
 | `VITE_SENTRY_DSN` | `https://xxx@sentry.io/yyy` | From sentry.io project settings. Leave unset to ship without Sentry. |
 
+### For Homebrew tap auto-update
+| Secret | How to get it |
+|--------|---------------|
+| `HOMEBREW_TAP_TOKEN` | A classic GitHub PAT with `repo` scope, authorized to push to `slothlabsorg/homebrew-tap`. Generate at [github.com/settings/tokens](https://github.com/settings/tokens) → **Generate new token (classic)** → check only `repo` → copy and paste as a repo secret. Without this secret `update-homebrew.yml` will fail on the checkout step. |
+
+**How the tap updater works** — `.github/workflows/update-homebrew.yml` fires
+on `release: released` (only after you publish the draft, not on draft creation).
+It downloads the two macOS DMG assets, computes their SHA256 hashes, rewrites
+`Casks/wattsorbit.rb` in `slothlabsorg/homebrew-tap`, and pushes a
+`wattsorbit <version>` commit. `brew install --cask slothlabsorg/tap/wattsorbit`
+picks it up automatically on the user's next `brew update`.
+
+If the tap ever drifts (e.g. you hotfix a Cask manually or the auto-update
+workflow hit a transient failure), trigger it on demand: **Actions → Update
+Homebrew Tap → Run workflow**, supply the tag (`v1.0.0`).
+
 ### For macOS code signing + notarization (Level 2)
 | Secret | How to get it |
 |--------|---------------|
