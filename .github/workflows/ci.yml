@@ -45,7 +45,8 @@ jobs:
             librsvg2-dev \
             libsoup-3.0-dev \
             build-essential \
-            libssl-dev
+            libssl-dev \
+            xdg-utils
 
       - run: cargo check
         working-directory: src-tauri

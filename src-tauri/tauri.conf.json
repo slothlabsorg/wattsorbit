@@ -80,7 +80,12 @@
     },
     "linux": {
       "deb": {
-        "depends": []
+        "depends": [
+          "libwebkit2gtk-4.1-0 (>= 2.38)",
+          "libgtk-3-0",
+          "libayatana-appindicator3-1",
+          "libnotify-bin"
+        ]
       }
     }
   }

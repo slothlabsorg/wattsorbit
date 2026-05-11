@@ -80,7 +80,8 @@ jobs:
             libssl-dev \
             file \
             wget \
-            libxdo-dev
+            libxdo-dev \
+            xdg-utils
 
       - run: npm ci
 

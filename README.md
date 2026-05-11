@@ -63,19 +63,32 @@ winget install SlothLabs.WattsOrbit
 Two packaging formats are produced on every release, for both `x86_64` (Intel/AMD) and `aarch64` (ARM — Raspberry Pi 4/5, AWS Graviton, Apple-Silicon VMs running Linux under UTM/Parallels):
 
 ```bash
-# Debian / Ubuntu — pick the architecture matching `dpkg --print-architecture`
-sudo dpkg -i wattsorbit_<version>_amd64.deb      # x86_64
-sudo dpkg -i wattsorbit_<version>_arm64.deb      # aarch64
+# Debian / Ubuntu — use `apt install ./…` (NOT `dpkg -i`) so dependencies
+# like libwebkit2gtk-4.1-0 get pulled in automatically.
+sudo apt install ./wattsorbit_<version>_amd64.deb   # x86_64
+sudo apt install ./wattsorbit_<version>_arm64.deb   # aarch64
 
-# Any distro (self-contained)
-chmod +x WattsOrbit_<version>_amd64.AppImage     # x86_64
-chmod +x WattsOrbit_<version>_aarch64.AppImage   # aarch64
+# Any distro (self-contained binary, system still needs webkit2gtk installed)
+chmod +x WattsOrbit_<version>_amd64.AppImage        # x86_64
+chmod +x WattsOrbit_<version>_aarch64.AppImage      # aarch64
 ./WattsOrbit_<version>_amd64.AppImage
 ```
 
-Installing the wrong-architecture `.deb` fails with "package architecture (amd64) does not match system (arm64)" — check with `uname -m` (x86_64 → amd64, aarch64 → arm64).
+Pick the architecture matching `uname -m` (`x86_64` → amd64, `aarch64` → arm64). Installing the wrong one fails with `package architecture (amd64) does not match system (arm64)`.
 
-Runtime requirements: `libwebkit2gtk-4.1`, `libayatana-appindicator3`, `libnotify-bin` (for tray notifications). The `.deb` declares these automatically; for the `.AppImage` install them via your package manager.
+**Runtime dependencies** — the `.deb` declares these and `apt install ./…` pulls them automatically: `libwebkit2gtk-4.1-0 (>= 2.38)`, `libgtk-3-0`, `libayatana-appindicator3-1`, `libnotify-bin`. If you're using the `.AppImage` or `dpkg -i` directly, install them yourself:
+
+```bash
+sudo apt install libwebkit2gtk-4.1-0 libgtk-3-0 libayatana-appindicator3-1 libnotify-bin
+```
+
+### Troubleshooting
+
+**"error while loading shared libraries: libwebkit2gtk-4.1.so.0: cannot open shared object file"** — you installed with `dpkg -i` (which ignores dependency metadata) on a fresh system that doesn't have WebKitGTK 4.1. Fix: `sudo apt -f install` will pull in the missing deps, or re-install via `sudo apt install ./wattsorbit_<version>_<arch>.deb` which handles them automatically.
+
+**WebKitGTK 4.1 isn't in your distro's repos** — required baseline is Ubuntu 22.04 / Debian 12 / Fedora 37 or newer. Older distros ship 4.0 which is incompatible with Tauri v2. No backport planned for v1.0.
+
+**Tray icon doesn't appear on GNOME** — vanilla GNOME 42+ dropped legacy tray support. Install the [AppIndicator extension](https://extensions.gnome.org/extension/615/appindicator-support/) to get it back.
 
 Wayland note: the tray appears via XEmbed / AppIndicator. On GNOME you may need the [AppIndicator extension](https://extensions.gnome.org/extension/615/appindicator-support/) for the icon to show up.
 

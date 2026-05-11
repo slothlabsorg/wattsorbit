@@ -81,6 +81,13 @@ macOS, Windows, and Linux.
 - "Open System Settings" tries `gnome-control-center power`,
   `systemsettings5 powerdevilglobalconfig`, then falls back to `xdg-open`.
 - External links via `xdg-open`.
+- `.deb` now declares its runtime dependencies (`libwebkit2gtk-4.1-0 (>=
+  2.38)`, `libgtk-3-0`, `libayatana-appindicator3-1`, `libnotify-bin`) so
+  `sudo apt install ./wattsorbit_<version>_<arch>.deb` pulls WebKitGTK
+  automatically on fresh systems. Previously the deps list was empty,
+  and installing via `dpkg -i` on a machine without WebKitGTK 4.1 would
+  silently succeed then crash at launch with `libwebkit2gtk-4.1.so.0:
+  cannot open shared object file`.
 
 All three platforms share the same `PowerStatus` payload and React UI —
 platform-specific code lives behind `#[cfg(target_os = ...)]` gates in
