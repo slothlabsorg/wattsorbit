@@ -50,12 +50,15 @@ macOS, Windows, and Linux.
   without leaving the app.
 - Crash reporting scaffolding wired in so we can triage issues shipped
   to real users.
-- Release workflow produces builds for four targets on every tag via
+- Release workflow produces builds for five targets on every tag via
   `tauri-apps/tauri-action`: macOS Apple Silicon (`aarch64-apple-darwin`),
   macOS Intel (`x86_64-apple-darwin`), Linux x86_64 (`.deb` + `.AppImage`
-  on `ubuntu-22.04`), and Windows x86_64 (`.msi` + `.nsis-setup.exe`).
+  on `ubuntu-22.04`), Linux aarch64 (`.deb` + `.AppImage` on
+  `ubuntu-22.04-arm`, for Raspberry Pi / Graviton / Linux-on-Apple-Silicon
+  VMs), and Windows x86_64 (`.msi` + `.nsis-setup.exe`).
 - CI (`ci.yml`) runs `cargo check` + `cargo test` on `macos-latest`,
-  `ubuntu-22.04`, and `windows-latest` — regressions on any OS block `main`.
+  `ubuntu-22.04`, `ubuntu-22.04-arm`, and `windows-latest` — regressions
+  on any OS/arch block `main`.
 
 **Windows support**
 - Battery data via WMI: `Win32_Battery` for %/state/runtime, plus

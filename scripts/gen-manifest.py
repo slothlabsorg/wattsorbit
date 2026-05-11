@@ -33,6 +33,7 @@ PLATFORM_SUFFIXES = [
     ("darwin-aarch64", "aarch64.app.tar.gz"),
     ("darwin-x86_64",  "x64.app.tar.gz"),
     ("linux-x86_64",   "amd64.AppImage.tar.gz"),
+    ("linux-aarch64",  "aarch64.AppImage.tar.gz"),
     ("windows-x86_64", "x64-setup.nsis.zip"),
 ]
 

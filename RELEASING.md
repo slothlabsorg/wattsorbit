@@ -17,7 +17,7 @@ It never runs on regular commits or branches.
 When a tag is pushed:
 
 1. GitHub Actions spins up one runner per target platform/architecture:
-   - 4 runners — Apple Silicon (macOS), Intel (macOS), Windows (x86_64), Ubuntu 22.04 (x86_64)
+   - 5 runners — Apple Silicon (macOS), Intel (macOS), Windows (x86_64), Ubuntu 22.04 (x86_64), Ubuntu 22.04 ARM (aarch64). ARM64 Linux uses GitHub's native `ubuntu-22.04-arm` runner — no qemu / cross-compile — since `webkit2gtk` cross-builds are painful.
 2. Each runner installs Node 20, Rust stable, and `npm ci`
 3. `tauri-apps/tauri-action` builds the Tauri app:
    - **macOS**: produces `AppName_x.y.z_aarch64.dmg` and `AppName_x.y.z_x64.dmg`

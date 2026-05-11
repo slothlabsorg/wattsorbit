@@ -25,11 +25,20 @@ jobs:
 
           # ── Linux ──────────────────────────────────────────────────────────
           # ubuntu-22.04 (glibc 2.35) gives the widest compatibility for .deb
-          # and .AppImage — 24.04 glibc is too new for older distros.
+          # and .AppImage — 24.04 glibc is too new for older distros. We build
+          # both x86_64 and aarch64 natively (GitHub now exposes an ARM64
+          # Ubuntu runner — no qemu/cross-compilation needed, which matters
+          # because webkit2gtk cross-compiles are painful) so users on
+          # Apple-Silicon VMs (UTM, Parallels), Raspberry Pi 4/5, and AWS
+          # Graviton can install a matching .deb / .AppImage.
           - os: ubuntu-22.04
             args: ''
             rust-target: x86_64-unknown-linux-gnu
             label: linux-x86_64
+          - os: ubuntu-22.04-arm
+            args: ''
+            rust-target: aarch64-unknown-linux-gnu
+            label: linux-aarch64
 
           # ── Windows ────────────────────────────────────────────────────────
           - os: windows-latest
@@ -55,9 +64,10 @@ jobs:
         with:
           workspaces: src-tauri
 
-      # Tauri v2 needs WebKitGTK 4.1 + GLib dev headers on Linux
+      # Tauri v2 needs WebKitGTK 4.1 + GLib dev headers on Linux.
+      # startsWith() matches both ubuntu-22.04 (x86_64) and ubuntu-22.04-arm.
       - name: Install Linux dependencies
-        if: matrix.os == 'ubuntu-22.04'
+        if: startsWith(matrix.os, 'ubuntu-')
         run: |
           sudo apt-get update
           sudo apt-get install -y \

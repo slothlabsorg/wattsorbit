@@ -60,16 +60,20 @@ winget install SlothLabs.WattsOrbit
 
 ### Linux
 
-Two packaging formats are produced on every release:
+Two packaging formats are produced on every release, for both `x86_64` (Intel/AMD) and `aarch64` (ARM — Raspberry Pi 4/5, AWS Graviton, Apple-Silicon VMs running Linux under UTM/Parallels):
 
 ```bash
-# Debian / Ubuntu
-sudo dpkg -i wattsorbit_<version>_amd64.deb
+# Debian / Ubuntu — pick the architecture matching `dpkg --print-architecture`
+sudo dpkg -i wattsorbit_<version>_amd64.deb      # x86_64
+sudo dpkg -i wattsorbit_<version>_arm64.deb      # aarch64
 
 # Any distro (self-contained)
-chmod +x WattsOrbit_<version>_amd64.AppImage
+chmod +x WattsOrbit_<version>_amd64.AppImage     # x86_64
+chmod +x WattsOrbit_<version>_aarch64.AppImage   # aarch64
 ./WattsOrbit_<version>_amd64.AppImage
 ```
+
+Installing the wrong-architecture `.deb` fails with "package architecture (amd64) does not match system (arm64)" — check with `uname -m` (x86_64 → amd64, aarch64 → arm64).
 
 Runtime requirements: `libwebkit2gtk-4.1`, `libayatana-appindicator3`, `libnotify-bin` (for tray notifications). The `.deb` declares these automatically; for the `.AppImage` install them via your package manager.
 
