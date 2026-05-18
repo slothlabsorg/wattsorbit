@@ -73,9 +73,9 @@ Do this for each repo separately (secrets are per-repo).
 ### For Homebrew tap auto-update
 | Secret | How to get it |
 |--------|---------------|
-| `HOMEBREW_TAP_TOKEN` | A classic GitHub PAT with `repo` scope, authorized to push to `slothlabsorg/homebrew-tap`. Generate at [github.com/settings/tokens](https://github.com/settings/tokens) → **Generate new token (classic)** → check only `repo` → copy and paste as a repo secret. Without this secret `update-homebrew.yml` will fail on the checkout step. |
+| `HOMEBREW_TAP_TOKEN` | A classic GitHub PAT with `repo` scope, authorized to push to `slothlabsorg/homebrew-tap`. Generate at [github.com/settings/tokens](https://github.com/settings/tokens) → **Generate new token (classic)** → check only `repo` → copy and paste as a repo secret. Without this secret `update-tap.yml` will fail on the checkout step. |
 
-**How the tap updater works** — `.github/workflows/update-homebrew.yml` fires
+**How the tap updater works** — `.github/workflows/update-tap.yml` fires
 on `release: released` (only after you publish the draft, not on draft creation).
 It downloads the two macOS DMG assets, computes their SHA256 hashes, rewrites
 `Casks/wattsorbit.rb` in `slothlabsorg/homebrew-tap`, and pushes a
