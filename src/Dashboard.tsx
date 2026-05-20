@@ -4,7 +4,9 @@ import type { TodayStats, ChargeSession, DeviceStat, PowerSample, PowerStatus } 
 import { deviceWatts, totalDeviceWatts } from './types'
 import { getTodayStats, getPowerStatus, openExternalUrl, openSystemSettings, setAutoStart } from './lib/tauri'
 import { openReport } from './lib/crash'
-import { UpdateBanner } from './components/UpdateBanner'
+import { UpdaterModal } from './components/UpdaterModal'
+import { News } from './screens/News'
+import { loadNews, getUnreadIds } from './lib/news'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const fmtWh   = (wh: number) => `${wh.toFixed(1)} Wh`
@@ -403,7 +405,7 @@ const USE_CASES = [
   },
 ]
 
-function Landing({ onOpen }: { onOpen: () => void }) {
+function Landing({ onOpen, onOpenNews, newsUnread }: { onOpen: () => void; onOpenNews: () => void; newsUnread: number }) {
   const [showAutostart, setShowAutostart] = useState(
     !localStorage.getItem(ASKED_KEY)
   )
@@ -481,6 +483,15 @@ function Landing({ onOpen }: { onOpen: () => void }) {
             </p>
           </div>
           <div className="flex items-center gap-3">
+            <button
+              onClick={onOpenNews}
+              className="relative text-xs text-text-muted hover:text-text-secondary transition-colors"
+            >
+              News
+              {newsUnread > 0 && (
+                <span className="absolute -top-1 -right-2 w-2 h-2 rounded-full bg-danger" />
+              )}
+            </button>
             <button
               onClick={() => openExternalUrl('https://github.com/slothlabs')}
               className="text-xs text-text-muted hover:text-text-secondary transition-colors"
@@ -768,7 +779,7 @@ function Roadmap() {
 
 // ── Power data view ───────────────────────────────────────────────────────────
 
-function PowerDataView({ onBack }: { onBack: () => void }) {
+function PowerDataView({ onBack, onOpenNews, newsUnread }: { onBack: () => void; onOpenNews: () => void; newsUnread: number }) {
   const [stats, setStats] = useState<TodayStats | null>(null)
   const [power, setPower] = useState<PowerStatus | null>(null)
   const [lastUpdate, setLastUpdate] = useState(Date.now())
@@ -821,10 +832,22 @@ function PowerDataView({ onBack }: { onBack: () => void }) {
               <span className="font-display text-sm font-semibold">Today's Power Data</span>
             </div>
           </div>
-          <button onClick={refresh}
-            className="text-xs text-text-muted hover:text-text-secondary transition-colors">
-            {new Date(lastUpdate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onOpenNews}
+              className="relative text-xs text-text-muted hover:text-text-secondary transition-colors"
+              title="News"
+            >
+              News
+              {newsUnread > 0 && (
+                <span className="absolute -top-1 -right-2 w-2 h-2 rounded-full bg-danger" />
+              )}
+            </button>
+            <button onClick={refresh}
+              className="text-xs text-text-muted hover:text-text-secondary transition-colors">
+              {new Date(lastUpdate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -958,26 +981,59 @@ function PowerDataView({ onBack }: { onBack: () => void }) {
   )
 }
 
-// ── Shell — landing ↔ data ────────────────────────────────────────────────────
+// ── Shell — landing ↔ data ↔ news ────────────────────────────────────────────
 
 export default function Dashboard() {
-  const [view, setView] = useState<'home' | 'data'>('home')
+  const [view, setView] = useState<'home' | 'data' | 'news'>('home')
+  const [newsUnread, setNewsUnread] = useState(0)
+
+  // Load unread count for the News button badge
+  useEffect(() => {
+    loadNews().then(items => {
+      setNewsUnread(getUnreadIds(items).length)
+    }).catch(() => {})
+  }, [])
 
   return (
     <>
-    <UpdateBanner />
+    <UpdaterModal />
     <AnimatePresence mode="wait">
       {view === 'home' ? (
         <motion.div key="home"
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}>
-          <Landing onOpen={() => setView('data')} />
+          <Landing onOpen={() => setView('data')} onOpenNews={() => setView('news')} newsUnread={newsUnread} />
         </motion.div>
-      ) : (
+      ) : view === 'data' ? (
         <motion.div key="data"
           initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}>
-          <PowerDataView onBack={() => setView('home')} />
+          <PowerDataView onBack={() => setView('home')} onOpenNews={() => setView('news')} newsUnread={newsUnread} />
+        </motion.div>
+      ) : (
+        <motion.div key="news"
+          initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="min-h-screen bg-bg-base text-text-primary"
+        >
+          {/* News header with back button */}
+          <div className="sticky top-0 z-10 bg-bg-elevated border-b border-border-subtle px-6 py-3">
+            <div className="flex items-center gap-3 max-w-5xl mx-auto">
+              <button
+                onClick={() => setView('home')}
+                aria-label="Back"
+                className="w-7 h-7 rounded-lg bg-bg-surface border border-border flex items-center justify-center
+                           text-text-muted hover:text-text-primary transition-colors"
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                  <path d="M8 2L4 6l4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div className="max-w-3xl mx-auto px-6 py-5 h-[calc(100vh-56px)]">
+            <News onVisit={() => setNewsUnread(0)} />
+          </div>
         </motion.div>
       )}
     </AnimatePresence>

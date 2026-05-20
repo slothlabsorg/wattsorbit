@@ -7,7 +7,10 @@ import { openReport } from './lib/crash'
 import PowerHeader from './components/PowerHeader'
 import BatteryBar from './components/BatteryBar'
 import DeviceList from './components/DeviceList'
-import { UpdateBanner } from './components/UpdateBanner'
+import { NewsBell } from './components/NewsBell'
+import { UpdaterModal } from './components/UpdaterModal'
+import { loadNews, markRead, getUnreadIds } from './lib/news'
+import type { NewsItem } from './types/news'
 
 const POLL_MS = 5_000
 
@@ -67,6 +70,36 @@ export default function App() {
   const [status, setStatus]   = useState<PowerStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [lastUpdate, setLastUpdate] = useState(Date.now())
+
+  // ── News / updater state ──────────────────────────────────────────────────
+  const [newsItems, setNewsItems]   = useState<NewsItem[]>([])
+  const [newsLoading, setNewsLoading] = useState(true)
+  const [newsUnread, setNewsUnread] = useState(0)
+  const [updaterDismissed, setUpdaterDismissed] = useState(false)
+  const [showUpdaterModal, setShowUpdaterModal] = useState(false)
+
+  useEffect(() => {
+    loadNews().then(items => {
+      setNewsItems(items)
+      setNewsUnread(getUnreadIds(items).length)
+      setNewsLoading(false)
+    }).catch(() => setNewsLoading(false))
+  }, [])
+
+  const handleMarkAllRead = useCallback(() => {
+    markRead(newsItems.map(i => i.id))
+    setNewsUnread(0)
+  }, [newsItems])
+
+  // Bridge NewsItem[] → OldNewsItem[] shape that NewsBell expects
+  const bellItems = newsItems.map(i => ({
+    id: i.id,
+    kind: (i.type === 'changelog' ? 'release' : 'announcement') as 'update-available' | 'release' | 'announcement',
+    title: i.title,
+    body: i.body,
+    date: i.publishedAt,
+    url: i.action?.url,
+  }))
 
   const refresh = useCallback(async () => {
     try {
@@ -130,7 +163,10 @@ export default function App() {
         className="relative w-full bg-bg-elevated rounded-2xl overflow-hidden"
         style={{ boxShadow: '0 8px 40px rgba(0,0,0,0.65), 0 0 0 1px rgba(245,158,11,0.12)' }}
       >
-        <UpdateBanner />
+        <UpdaterModal
+          dismissed={updaterDismissed && !showUpdaterModal}
+          onDismiss={() => { setUpdaterDismissed(true); setShowUpdaterModal(false) }}
+        />
         {/* ── Charger-connected flash overlay ──────────────────────────── */}
         <AnimatePresence>
           {chargerFlash && (
@@ -184,6 +220,13 @@ export default function App() {
             )}
             {/* Last-updated dot */}
             <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" title={`Updated ${Math.round((Date.now() - lastUpdate) / 1000)}s ago`} />
+            <NewsBell
+              items={bellItems}
+              unreadCount={newsUnread}
+              loading={newsLoading}
+              onMarkAllRead={handleMarkAllRead}
+              onTriggerUpdate={() => { setShowUpdaterModal(true) }}
+            />
             <CloseBtn />
           </div>
         </div>
