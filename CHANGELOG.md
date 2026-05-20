@@ -7,6 +7,19 @@ this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.1.0] — 2026-05-20
+
+### New Features
+- NewsBell in the tray popup header — shows unread dot and dropdown with release notes and announcements
+- News screen in the Dashboard — full feed with markdown rendering, badges, and pull-to-refresh
+- UpdaterModal replaces UpdateBanner — changelog display, download progress, and in-app install
+- Homebrew Cask auto-update on release publish
+
+### Other Changes
+- SEO-optimized README with keyword-led headline and cross-link to the Orbit suite
+
+---
+
 ## [1.0.0] — 2026-05-10
 
 First public release of WattsOrbit — a cross-platform tray power monitor for
