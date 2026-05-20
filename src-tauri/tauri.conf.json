@@ -51,7 +51,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "REPLACE_WITH_PUBLIC_KEY_FROM: npx tauri signer generate -w ~/.tauri/wattsorbit.key",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEUxMzdBODAyMjdGQTVCNDYKUldSR1cvb25BcWczNGJESU9xTXRZZmRaTVdBa3dFN1NHeGdSUWlKcjhwOHZWa3RMMHl2SUsyRUkK",
       "endpoints": [
         "https://raw.githubusercontent.com/slothlabsorg/wattsorbit/main/latest.json"
       ]
