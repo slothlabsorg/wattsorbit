@@ -132,8 +132,9 @@ jobs:
               --private-key "$TAURI_SIGNING_PRIVATE_KEY" \
               --password "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}" 2>/dev/null || true
             if [ -f "${tgz}.sig" ]; then
-              gh release upload "${{ github.ref_name }}" "${tgz}.sig" \
-                --name "$upload_name" --repo "${{ github.repository }}" --clobber || true
+              cp "${tgz}.sig" "/tmp/${upload_name}"
+              gh release upload "${{ github.ref_name }}" "/tmp/${upload_name}" \
+                --repo "${{ github.repository }}" --clobber
               echo "  ✓ uploaded $upload_name"
             fi
           }
