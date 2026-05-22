@@ -65,3 +65,50 @@ test.describe('Popup — devices', () => {
     await snap(page, 'popup-devices')
   })
 })
+
+// ── Update modal + bell screenshots ──────────────────────────────────────────
+test('update modal — available with changelog', async ({ page }) => {
+  await page.setViewportSize({ width: 400, height: 700 })
+  await page.goto('/?mock=1&updater=1')
+  await page.waitForSelector('.font-display', { timeout: 8000 })
+  await page.waitForTimeout(600)
+  await snap(page, 'update-01-modal-popup')
+})
+
+test('bell — visible in popup header', async ({ page }) => {
+  await page.setViewportSize({ width: 400, height: 700 })
+  await page.goto('/?mock=1&news=1')
+  await page.waitForSelector('.font-display', { timeout: 8000 })
+  await page.waitForTimeout(500)
+  await snap(page, 'update-02-bell-visible')
+})
+
+test('bell — dropdown open with news items', async ({ page }) => {
+  await page.setViewportSize({ width: 400, height: 700 })
+  await page.goto('/?mock=1&news=1')
+  await page.waitForSelector('.font-display', { timeout: 8000 })
+  await page.waitForTimeout(500)
+  const bell = page.locator('[data-testid="news-bell"]')
+  if (await bell.count() > 0) { await bell.click(); await page.waitForTimeout(300) }
+  await snap(page, 'update-03-bell-dropdown')
+})
+
+test('update modal — dashboard view', async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 800 })
+  await page.goto('/?dashboard=1&mock=1&updater=1')
+  await page.waitForSelector('body', { timeout: 8000 })
+  await page.waitForTimeout(600)
+  await snap(page, 'update-04-modal-dashboard')
+})
+
+test('bell — update item after dismiss (popup)', async ({ page }) => {
+  await page.setViewportSize({ width: 400, height: 700 })
+  await page.goto('/?mock=1&updater=1&news=1')
+  await page.waitForSelector('.font-display', { timeout: 8000 })
+  await page.waitForTimeout(600)
+  const later = page.getByText('Later', { exact: true }).first()
+  if (await later.count() > 0) { await later.click(); await page.waitForTimeout(400) }
+  const bell = page.locator('[data-testid="news-bell"]')
+  if (await bell.count() > 0) { await bell.click(); await page.waitForTimeout(300) }
+  await snap(page, 'update-05-bell-update-item')
+})

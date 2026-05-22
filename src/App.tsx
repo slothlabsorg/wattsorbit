@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { PowerStatus } from './types'
 import { formatWatts, formatMinutes, totalDeviceWatts } from './types'
@@ -77,6 +77,7 @@ export default function App() {
   const [newsUnread, setNewsUnread] = useState(0)
   const [updaterDismissed, setUpdaterDismissed] = useState(false)
   const [showUpdaterModal, setShowUpdaterModal] = useState(false)
+  const [updateVersion, setUpdateVersion] = useState('')
 
   useEffect(() => {
     loadNews().then(items => {
@@ -91,15 +92,22 @@ export default function App() {
     setNewsUnread(0)
   }, [newsItems])
 
-  // Bridge NewsItem[] → OldNewsItem[] shape that NewsBell expects
-  const bellItems = newsItems.map(i => ({
-    id: i.id,
-    kind: (i.type === 'changelog' ? 'release' : 'announcement') as 'update-available' | 'release' | 'announcement',
-    title: i.title,
-    body: i.body,
-    date: i.publishedAt,
-    url: i.action?.url,
-  }))
+  // Bell items: synthetic update entry (when dismissed) + one per kind from news
+  const bellItems = useMemo(() => {
+    type BellItem = { id: string; kind: 'update-available' | 'release' | 'announcement'; title: string; body?: string; date: string; url?: string }
+    const items: BellItem[] = []
+    if (updaterDismissed && updateVersion) {
+      items.push({ id: 'update-available', kind: 'update-available', title: `v${updateVersion} is available`, body: 'Click to install the latest update', date: new Date().toISOString() })
+    }
+    const seen = new Set<string>()
+    for (const i of newsItems.filter(n => n.type !== 'ad')) {
+      const kind: BellItem['kind'] = i.type === 'changelog' ? 'release' : 'announcement'
+      if (seen.has(kind)) continue
+      seen.add(kind)
+      items.push({ id: i.id, kind, title: i.title, body: i.body, date: i.publishedAt, url: i.action?.url })
+    }
+    return items
+  }, [newsItems, updaterDismissed, updateVersion])
 
   const refresh = useCallback(async () => {
     try {
@@ -166,6 +174,7 @@ export default function App() {
         <UpdaterModal
           dismissed={updaterDismissed && !showUpdaterModal}
           onDismiss={() => { setUpdaterDismissed(true); setShowUpdaterModal(false) }}
+          onUpdateAvailable={(v) => setUpdateVersion(v)}
         />
         {/* ── Charger-connected flash overlay ──────────────────────────── */}
         <AnimatePresence>
