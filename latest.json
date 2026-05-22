@@ -1,15 +1,15 @@
 {
-  "version": "v1.1.0",
-  "notes": "## What's new in v1.1.0\n\n### New Features\n- **NewsBell** \u2014 bell icon in the tray popup header with unread dot and dropdown showing release notes and announcements\n- **News screen** \u2014 full news feed in the Dashboard with markdown rendering, type badges, and pull-to-refresh\n- **UpdaterModal** \u2014 replaces the old update banner with a proper modal: changelog display, download progress bar, and one-click in-app install\n- Homebrew Cask auto-updates on release publish\n\n### Other Changes\n- SEO-optimized README\n\n---\n\n**Install via Homebrew:**\n```\nbrew install --cask slothlabsorg/tap/wattsorbit\n```\nOr download the DMG directly from the assets below.",
-  "pub_date": "2026-05-21T17:11:23Z",
+  "version": "v1.1.1",
+  "notes": "Minor stability fix.",
+  "pub_date": "2026-05-22T00:17:01Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSR1cvb25BcWczNFpyNUgxUkFFUnJPZ0V3ZFVkd000a1RuVjloK3JzOEZTSHlZZ0VzUFhrZkEvMm1DNEJ6QndqZ24rMkJZYmVKR2IyOHRjN1R1Q2hYMmlIekFNRkIyQUFJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc5MzgyNTkzCWZpbGU6V2F0dHNPcmJpdC5hcHAudGFyLmd6Ck1tV2pjaHpLQ1VqMGp4RVhYV2lGZFgvMzhSRVdCamExVnhrQnJncFVha0J5RmtYck5BNXRWbjBPVGlRTmFmdkc2NmlqLzB5aW0zVUFkc21OdGVOcERBPT0K",
-      "url": "https://github.com/slothlabsorg/wattsorbit/releases/download/v1.1.0/WattsOrbit_aarch64.app.tar.gz"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSR1cvb25BcWczNFVoTlJGTmg4Y25RSXhoWGx3cFo2bDdCcVRNQzVuZjZ1UStDQ0ZLdWpGVGtpaFNpNCtLemE4d3M3K2tRc1VsRzNGQ0E2Q0NxTVBiUU1mZEpMSlZUaHdVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc5NDA4NDM0CWZpbGU6V2F0dHNPcmJpdC5hcHAudGFyLmd6CkZ1dGwxSlk5VU90a2hHaTZnRnV2aTJVR1B0c01VSWpsK0NCTU9pZnpJTkxlbmloYnVIa01abnZvYzlzemFTMVorMXJGMUJNNU9xTXlWRGQrWHhFekFRPT0K",
+      "url": "https://github.com/slothlabsorg/wattsorbit/releases/download/v1.1.1/WattsOrbit_aarch64.app.tar.gz"
     },
     "darwin-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSR1cvb25BcWczNFNrTW04dE54MjBNTEcyM0pKQ01mVWRuWWt2cWxQTUV6MWRkTWl4T1V5Mjh2VFZzT3hMTGp2bUxPYm4wSWtXT21oYlFyNW1vL1ZiMmRhRTRxMTk4aWdVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc5MzgyNDk4CWZpbGU6V2F0dHNPcmJpdC5hcHAudGFyLmd6CjR5dUJwQVlubjJMZ242eHU3d1ErODJpbFZ2OGd2R2JKWUpyWVdMKzFDM0RXQkF1alN5MGlXSHNUN3B1UW5Jc2tQMldmb3hqcVh6UnNOU0xRTG00ZUFBPT0K",
-      "url": "https://github.com/slothlabsorg/wattsorbit/releases/download/v1.1.0/WattsOrbit_x64.app.tar.gz"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSR1cvb25BcWczNGErclVFQzBvbXJDYUl4c203V3JjdFMrWFU3d3JrZ0pOUkd2eHlwRXUrNXBYZmVVWG1QaGg4cVV1QWNzOWhhbmdVQUR3ckFMSnNrOUkvclRqT2NrbWcwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc5NDA4NTA5CWZpbGU6V2F0dHNPcmJpdC5hcHAudGFyLmd6CkNHSW9mRFVLNU8yaTEyKzdsYXVOWXN1MVQ0VldyOGxPYW0rWGw2MWRBcDFNZWxsellpYWlEZ1RHV2tIbmZrMm90S3lwNmtqbWpOYlk3RVF2WXVFVUNnPT0K",
+      "url": "https://github.com/slothlabsorg/wattsorbit/releases/download/v1.1.1/WattsOrbit_x64.app.tar.gz"
     }
   }
 }
