@@ -7,6 +7,13 @@ this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.1.1] — 2026-05-21
+
+### Bug Fixes
+- Minor stability fix to trigger updater test flow
+
+---
+
 ## [1.1.0] — 2026-05-20
 
 ### New Features
