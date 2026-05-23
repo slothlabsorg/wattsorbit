@@ -7,6 +7,16 @@ this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.2.0] — 2026-05-22
+
+### New Features
+- Tray popup: compact amber pill shows version instead of full modal overlay
+- Dashboard: sticky update banner with Update Now and 1h snooze (persists)
+- Dashboard: dock icon appears when dashboard opens, hides when closed
+- open_dashboard Tauri command wired to pill click and bell update item
+
+---
+
 ## [1.1.1] — 2026-05-21
 
 ### Bug Fixes
