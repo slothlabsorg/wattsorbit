@@ -1,15 +1,15 @@
 {
-  "version": "v1.2.0",
-  "notes": "## What's new in v1.2.0\n\n### New Features\n- **Tray popup**: compact amber pill `\u2191 v1.2.0` in the header \u2014 no more modal overlay blocking the popup\n- **Dashboard**: sticky update banner at the top with **Update Now** and **1h snooze** \u2014 persists after app reopens so you don't miss an update\n- **Dock icon**: WattsOrbit now appears in the Dock when the dashboard is open, disappears when it's closed\n- Bell \"Update\" item now opens the dashboard instead of showing a modal in the tray\n\n> **Pre-release** \u2014 install to test the v1.2.0 \u2192 v1.x update flow before stable release.\n> Stable users on v1.1.x will NOT be prompted to update (latest.json points to v1.1.1).",
-  "pub_date": "2026-05-23T04:50:31Z",
+  "version": "v1.2.1",
+  "notes": "## What's fixed in v1.2.1\n\n- **Popup closes on outside click** \u2014 clicking anywhere outside the popup now hides it correctly\n- **Header layout** \u2014 \"On Battery\" badge no longer wraps to two lines (whitespace-nowrap)\n- **Temperature pill** \u2014 shown as plain text without background, hidden below 28\u00b0C to reduce clutter\n- **Popup gap** \u2014 floats a bit further below the menu bar so it looks less stuck to it",
+  "pub_date": "2026-05-23T07:45:46Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSR1cvb25BcWczNFNMZWVCR3RBNzB5Mlp4dmFab1RrM1ZuTm1JbytsVEYvS3RQK2gwZ0J6YXJUM2FPWWtBV1pldDRxSmxSQnFCNW9XSWpvTGJpcnJUYjVaSWNQb1AxWHdVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc5NTExNDg4CWZpbGU6V2F0dHNPcmJpdC5hcHAudGFyLmd6ClhKNkJ0RlFGTnpNdjJuUWMvSXdxcUVpM1FQNUVicmlFUHFhb0c4RTVVMHNLNnVKVzdTaW5oeER6ZW5UL2V1Qzc3dTFNdmlTL0hWSm5Mc3hJV3oyU0JBPT0K",
-      "url": "https://github.com/slothlabsorg/wattsorbit/releases/download/v1.2.0/WattsOrbit_aarch64.app.tar.gz"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSR1cvb25BcWczNGZnR0F3MGE1ZTRZNW5rKzB3WUJxcnREMU91NXlFd2FVVWRFcGt6NmM4d09mOGdoL3NFWVYxTTJCcEVoNm82R3hJRWZGZUVCK0ZvcFIzMEIzdkFLbEFVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc5NTIxOTUwCWZpbGU6V2F0dHNPcmJpdC5hcHAudGFyLmd6CkwzNkhjc0t6dFpXVzdaZ0JVN284WU5EMlVhYnEzaGhrZlJRRW5xR2lXbk5wTXVJK3hXeFJrKzdQejVRWUcxS01vUTUrWWdnOXU3VWF6MXIyKzhwZ0RRPT0K",
+      "url": "https://github.com/slothlabsorg/wattsorbit/releases/download/v1.2.1/WattsOrbit_aarch64.app.tar.gz"
     },
     "darwin-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSR1cvb25BcWczNFhUQ3FiUTFTTFFyUU4zNi9DeThtK1l4TVB1TDBFUEN2QVFvTlBwYUhsSGpvTHVYQ3lYZWZyNkFRZytSL1F1eHNrZTZKZlA3NWd3NEZxZ3htMnRiVWc0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc5NTExNDgwCWZpbGU6V2F0dHNPcmJpdC5hcHAudGFyLmd6Cks3VnYrVDZtVWl3QWIvZHJiWVBtU1ZaRUpYd1JMK093ZG1QOWxKZlZ2VVdJYmhjNWxUR1VRNlJWWHcyN1ZRY0lOWGtLTmJEZjRtY3RGVzhEdGxnT0N3PT0K",
-      "url": "https://github.com/slothlabsorg/wattsorbit/releases/download/v1.2.0/WattsOrbit_x64.app.tar.gz"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSR1cvb25BcWczNFhQMFJBZHZyU0QvendOTEVscWI5MTMvRDdsOFBBd29IMHo1TDNuWVYycWM2dHI0ZTdpVHl2WjJwZS9tc0YzTktnOFo0ckQ0NGlRZ1VEUDVnYmd2OUFFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc5NTIyMDExCWZpbGU6V2F0dHNPcmJpdC5hcHAudGFyLmd6CnJNaHU3QzV3M3hFYVBuUW9ielAzK2JUMUJ5QUYxSVRwOGFUVHZXUUQvNW9ycHM3M1VJS0pkYk1JSVo4WEJyeFhjcmdQRUxER0tBWkN1K3RlYTFWT0JnPT0K",
+      "url": "https://github.com/slothlabsorg/wattsorbit/releases/download/v1.2.1/WattsOrbit_x64.app.tar.gz"
     }
   }
 }
