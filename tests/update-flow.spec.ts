@@ -1,7 +1,9 @@
 /**
  * WattsOrbit — Update flow E2E suite
  *
- * Covers: UpdaterModal (popup + dashboard), NewsBell reminder, full dismiss→re-trigger flow.
+ * Tray popup: compact pill + bell reminder (no modal)
+ * Dashboard:  full UpdaterModal + sticky snooze banner
+ *
  * Run: npx playwright test --project=update-flow
  */
 import { test, expect, type Page } from '@playwright/test'
@@ -19,170 +21,183 @@ async function snap(page: Page, name: string) {
   console.log(`  ✓  ${name}.png`)
 }
 
-async function openPopupWithUpdater(page: Page, extra = '') {
-  await page.setViewportSize({ width: 400, height: 700 })
-  await page.goto(`/?mock=1&updater=1${extra}`)
-  await page.waitForSelector('text=Update Available', { timeout: 8000 })
-  await page.waitForTimeout(300)
-}
+// ── Tray popup (400×700) ──────────────────────────────────────────────────────
 
-// ── Popup (400×700) ───────────────────────────────────────────────────────────
-
-test.describe('Popup — UpdaterModal', () => {
-  test('01 — modal appears on startup when update available', async ({ page }) => {
-    await openPopupWithUpdater(page)
-
-    await expect(page.getByText('Update Available', { exact: true })).toBeVisible()
-    await expect(page.getByText(/ready to install/i)).toBeVisible()
-
-    await snap(page, 'upd-01-modal-appears')
-  })
-
-  test('02 — changelog section is visible inside modal', async ({ page }) => {
-    await openPopupWithUpdater(page)
-
-    // WHAT'S NEW section
-    await expect(page.getByText(/what.s new/i).first()).toBeVisible()
-
-    // At least one changelog item — the mock has bullet points
-    const modalText = await page.locator('text=Update Available').locator('..').locator('..').innerText().catch(() => '')
-    const bodyContent = await page.locator('body').innerText()
-    expect(bodyContent.toLowerCase()).toMatch(/new|fix|support|improve|feature/)
-
-    await snap(page, 'upd-02-changelog-visible')
-  })
-
-  test('03 — "Later" button dismisses modal', async ({ page }) => {
-    await openPopupWithUpdater(page)
-
-    await page.getByText('Later', { exact: true }).click()
+test.describe('Tray popup — compact pill + bell', () => {
+  test('01 — compact update pill visible in header', async ({ page }) => {
+    await page.setViewportSize({ width: 400, height: 700 })
+    await page.goto('/?mock=1&updater=1')
+    await page.waitForSelector('.font-display', { timeout: 8000 })
     await page.waitForTimeout(400)
 
-    await expect(page.getByText('Update Available', { exact: true })).not.toBeVisible()
+    // Pill shows version — NOT the full modal backdrop
+    const pill = page.locator('button[title*="available"]')
+    await expect(pill).toBeVisible()
+    await expect(page.getByText('Update Available')).not.toBeVisible()
 
-    await snap(page, 'upd-03-modal-dismissed')
+    await snap(page, 'upd-01-tray-pill')
   })
 
-  test('04 — bell shows dot after "Later" (update still pending)', async ({ page }) => {
-    await openPopupWithUpdater(page, '&news=1')
+  test('02 — no full modal backdrop in tray popup', async ({ page }) => {
+    await page.setViewportSize({ width: 400, height: 700 })
+    await page.goto('/?mock=1&updater=1')
+    await page.waitForSelector('.font-display', { timeout: 8000 })
+    await page.waitForTimeout(400)
 
-    await page.getByText('Later', { exact: true }).click()
-    await page.waitForTimeout(500)
-
-    const dot = page.locator('[data-testid="news-bell-dot"]')
-    await expect(dot).toBeVisible()
-
-    await snap(page, 'upd-04-bell-dot-after-dismiss')
+    // No modal backdrop polluting the popup header
+    const backdrops = await page.locator('[class*="backdrop-blur"]').count()
+    expect(backdrops).toBe(0)
+    await snap(page, 'upd-02-tray-no-modal')
   })
 
-  test('05 — bell dropdown shows "Update" item after dismiss', async ({ page }) => {
-    await openPopupWithUpdater(page, '&news=1')
-
-    await page.getByText('Later', { exact: true }).click()
+  test('03 — bell shows Update item in tray', async ({ page }) => {
+    await page.setViewportSize({ width: 400, height: 700 })
+    await page.goto('/?mock=1&updater=1&news=1')
+    await page.waitForSelector('.font-display', { timeout: 8000 })
     await page.waitForTimeout(500)
 
-    await page.locator('[data-testid="news-bell"]').click()
+    const bell = page.locator('[data-testid="news-bell"]')
+    await expect(bell).toBeVisible()
+    await bell.click()
     await page.waitForTimeout(300)
 
     await expect(page.locator('[data-testid="news-dropdown"]')).toBeVisible()
     await expect(page.locator('[data-testid="news-item-update-available"]')).toBeVisible()
 
-    await snap(page, 'upd-05-bell-update-item')
+    await snap(page, 'upd-03-tray-bell-update-item')
   })
 
-  test('06 — clicking update item in bell re-opens modal', async ({ page }) => {
-    await openPopupWithUpdater(page, '&news=1')
-
-    await page.getByText('Later', { exact: true }).click()
-    await page.waitForTimeout(500)
-
-    await page.locator('[data-testid="news-bell"]').click()
-    await page.waitForTimeout(300)
-    await page.locator('[data-testid="news-item-update-available"]').click()
-    await page.waitForTimeout(400)
-
-    await expect(page.getByText('Update Available', { exact: true })).toBeVisible()
-
-    await snap(page, 'upd-06-modal-reopened-from-bell')
-  })
-
-  test('07 — bell visible with news items (no update)', async ({ page }) => {
+  test('04 — bell + pill together with news items', async ({ page }) => {
     await page.setViewportSize({ width: 400, height: 700 })
-    await page.goto('/?mock=1&news=1')
+    await page.goto('/?mock=1&updater=1&news=1')
     await page.waitForSelector('.font-display', { timeout: 8000 })
     await page.waitForTimeout(500)
 
-    await expect(page.locator('[data-testid="news-bell"]')).toBeVisible()
-    await page.locator('[data-testid="news-bell"]').click()
-    await page.waitForTimeout(300)
-    await expect(page.locator('[data-testid="news-dropdown"]')).toBeVisible()
+    await expect(page.locator('button[title*="available"]')).toBeVisible()
+    await expect(page.locator('[data-testid="news-bell-dot"]')).toBeVisible()
 
-    await snap(page, 'upd-07-bell-news-only')
+    await snap(page, 'upd-04-tray-pill-and-bell')
   })
 })
 
 // ── Dashboard (1100×800) ──────────────────────────────────────────────────────
 
-test.describe('Dashboard — UpdaterModal', () => {
-  test('08 — modal appears in dashboard', async ({ page }) => {
+test.describe('Dashboard — UpdaterModal + snooze banner', () => {
+  test('05 — update modal visible in dashboard', async ({ page }) => {
     await page.setViewportSize({ width: 1100, height: 800 })
-    await page.goto('/?dashboard=1&mock=1&updater=1')
+    await page.goto('/?window=dashboard&mock=1&updater=1')
     await page.waitForSelector('text=Update Available', { timeout: 8000 })
     await page.waitForTimeout(400)
 
     await expect(page.getByText('Update Available', { exact: true })).toBeVisible()
     await expect(page.getByText(/ready to install/i)).toBeVisible()
+    await expect(page.getByText(/what.s new/i).first()).toBeVisible()
 
-    await snap(page, 'upd-08-dashboard-modal')
+    await snap(page, 'upd-05-dashboard-modal')
   })
 
-  test('09 — dashboard shows News view', async ({ page }) => {
+  test('06 — sticky banner shown after modal dismiss', async ({ page }) => {
     await page.setViewportSize({ width: 1100, height: 800 })
-    await page.goto('/?dashboard=1&mock=1')
+    // Clear any snooze state
+    await page.goto('/?window=dashboard&mock=1&updater=1')
+    await page.evaluate(() => localStorage.removeItem('wattsorbit.updateBannerSnoozedUntil'))
+    await page.waitForSelector('text=Update Available', { timeout: 8000 })
+    await page.waitForTimeout(400)
+
+    // Dismiss the modal
+    await page.getByText('Later', { exact: true }).click()
+    await page.waitForTimeout(500)
+    await expect(page.getByText('Update Available')).not.toBeVisible()
+
+    // Sticky banner visible
+    const banner = page.locator('text=is available').first()
+    await expect(banner).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Update Now' })).toBeVisible()
+
+    await snap(page, 'upd-06-dashboard-sticky-banner')
+  })
+
+  test('07 — banner snooze button dismisses for 1 hour', async ({ page }) => {
+    await page.setViewportSize({ width: 1100, height: 800 })
+    await page.goto('/?window=dashboard&mock=1&updater=1')
+    await page.evaluate(() => localStorage.removeItem('wattsorbit.updateBannerSnoozedUntil'))
+    await page.waitForSelector('text=Update Available', { timeout: 8000 })
+    await page.waitForTimeout(400)
+    await page.getByText('Later', { exact: true }).click()
+    await page.waitForTimeout(500)
+
+    // Click the 1h snooze button
+    const snoozeBtn = page.getByRole('button', { name: '1h' })
+    await expect(snoozeBtn).toBeVisible()
+    await snoozeBtn.click()
+    await page.waitForTimeout(400)
+
+    // Banner is gone
+    await expect(page.getByRole('button', { name: '1h' })).not.toBeVisible()
+    // Snooze is stored in localStorage
+    const snoozed = await page.evaluate(() => localStorage.getItem('wattsorbit.updateBannerSnoozedUntil'))
+    expect(Number(snoozed)).toBeGreaterThan(Date.now())
+
+    await snap(page, 'upd-07-banner-snoozed')
+  })
+
+  test('08 — "Update Now" in banner reopens modal', async ({ page }) => {
+    await page.setViewportSize({ width: 1100, height: 800 })
+    await page.goto('/?window=dashboard&mock=1&updater=1')
+    await page.evaluate(() => localStorage.removeItem('wattsorbit.updateBannerSnoozedUntil'))
+    await page.waitForSelector('text=Update Available', { timeout: 8000 })
+    await page.waitForTimeout(400)
+    await page.getByText('Later', { exact: true }).click()
+    await page.waitForTimeout(500)
+
+    await page.getByRole('button', { name: 'Update Now' }).click()
+    await page.waitForTimeout(400)
+    await expect(page.getByText('Update Available', { exact: true })).toBeVisible()
+
+    await snap(page, 'upd-08-banner-update-now-reopens-modal')
+  })
+
+  test('09 — dashboard news view', async ({ page }) => {
+    await page.setViewportSize({ width: 1100, height: 800 })
+    await page.goto('/?window=dashboard&mock=1')
     await page.waitForSelector('body', { timeout: 8000 })
     await page.waitForTimeout(800)
-
     const newsBtn = page.getByRole('button', { name: /news/i }).first()
-    if (await newsBtn.count() > 0) {
-      await newsBtn.click()
-      await page.waitForTimeout(400)
-    }
-
-    await snap(page, 'upd-09-dashboard-news-view')
+    if (await newsBtn.count() > 0) { await newsBtn.click(); await page.waitForTimeout(400) }
+    await snap(page, 'upd-09-dashboard-news')
   })
 })
 
-// ── Full E2E flow ─────────────────────────────────────────────────────────────
+// ── Full flow composite ───────────────────────────────────────────────────────
 
-test('10 — full update flow: modal → later → bell dot → bell item → reopen', async ({ page }) => {
+test('10 — full flow: tray pill → dashboard modal → dismiss → banner → snooze', async ({ page }) => {
+  // Tray: pill visible, no modal
   await page.setViewportSize({ width: 400, height: 700 })
   await page.goto('/?mock=1&updater=1&news=1')
+  await page.waitForSelector('.font-display', { timeout: 8000 })
+  await page.waitForTimeout(400)
+  await expect(page.locator('button[title*="available"]')).toBeVisible()
+  await expect(page.getByText('Update Available')).not.toBeVisible()
+  await snap(page, 'upd-10a-tray-pill')
+
+  // Dashboard: modal appears
+  await page.setViewportSize({ width: 1100, height: 800 })
+  await page.goto('/?window=dashboard&mock=1&updater=1')
+  await page.evaluate(() => localStorage.removeItem('wattsorbit.updateBannerSnoozedUntil'))
   await page.waitForSelector('text=Update Available', { timeout: 8000 })
-  await page.waitForTimeout(300)
+  await page.waitForTimeout(400)
+  await expect(page.getByText('Update Available', { exact: true })).toBeVisible()
+  await snap(page, 'upd-10b-dashboard-modal')
 
-  // 1 — modal visible with version
-  await expect(page.getByText('Update Available')).toBeVisible()
-  await snap(page, 'upd-10a-full-flow-modal')
-
-  // 2 — dismiss
+  // Dismiss → sticky banner
   await page.getByText('Later', { exact: true }).click()
   await page.waitForTimeout(500)
-  await expect(page.getByText('Update Available')).not.toBeVisible()
-  await snap(page, 'upd-10b-full-flow-dismissed')
+  await expect(page.getByRole('button', { name: 'Update Now' })).toBeVisible()
+  await snap(page, 'upd-10c-sticky-banner')
 
-  // 3 — bell has dot
-  await expect(page.locator('[data-testid="news-bell-dot"]')).toBeVisible()
-  await snap(page, 'upd-10c-full-flow-bell-dot')
-
-  // 4 — bell shows update item
-  await page.locator('[data-testid="news-bell"]').click()
+  // Snooze
+  await page.getByRole('button', { name: '1h' }).click()
   await page.waitForTimeout(300)
-  await expect(page.locator('[data-testid="news-item-update-available"]')).toBeVisible()
-  await snap(page, 'upd-10d-full-flow-bell-open')
-
-  // 5 — clicking it reopens modal
-  await page.locator('[data-testid="news-item-update-available"]').click()
-  await page.waitForTimeout(400)
-  await expect(page.getByText('Update Available')).toBeVisible()
-  await snap(page, 'upd-10e-full-flow-modal-reopened')
+  await expect(page.getByRole('button', { name: '1h' })).not.toBeVisible()
+  await snap(page, 'upd-10d-snoozed')
 })

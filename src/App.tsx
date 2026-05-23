@@ -2,13 +2,12 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { PowerStatus } from './types'
 import { formatWatts, formatMinutes, totalDeviceWatts } from './types'
-import { getPowerStatus, hideWindow } from './lib/tauri'
+import { getPowerStatus, hideWindow, openDashboard } from './lib/tauri'
 import { openReport } from './lib/crash'
 import PowerHeader from './components/PowerHeader'
 import BatteryBar from './components/BatteryBar'
 import DeviceList from './components/DeviceList'
 import { NewsBell } from './components/NewsBell'
-import { UpdaterModal } from './components/UpdaterModal'
 import { loadNews, markRead, getUnreadIds } from './lib/news'
 import type { NewsItem } from './types/news'
 
@@ -75,9 +74,13 @@ export default function App() {
   const [newsItems, setNewsItems]   = useState<NewsItem[]>([])
   const [newsLoading, setNewsLoading] = useState(true)
   const [newsUnread, setNewsUnread] = useState(0)
-  const [updaterDismissed, setUpdaterDismissed] = useState(false)
-  const [showUpdaterModal, setShowUpdaterModal] = useState(false)
-  const [updateVersion, setUpdateVersion] = useState('')
+  const [updateVersion, setUpdateVersion] = useState(() => {
+    // Mock support: ?updater=1 pre-populates so tray pill shows in dev
+    try {
+      if (new URL(window.location.href).searchParams.get('updater') === '1') return '1.1.0'
+    } catch { /* */ }
+    return ''
+  })
 
   useEffect(() => {
     loadNews().then(items => {
@@ -87,17 +90,31 @@ export default function App() {
     }).catch(() => setNewsLoading(false))
   }, [])
 
+  // Check for updates in background — version stored so pill + bell can show it
+  useEffect(() => {
+    if (updateVersion) return // already set (mock or previous check)
+    const check = async () => {
+      try {
+        const { check: checkUpdate } = await import('@tauri-apps/plugin-updater')
+        const update = await checkUpdate()
+        if (update) setUpdateVersion(update.version)
+      } catch { /* not in Tauri or no update */ }
+    }
+    const t = setTimeout(check, 4000)
+    return () => clearTimeout(t)
+  }, [])
+
   const handleMarkAllRead = useCallback(() => {
     markRead(newsItems.map(i => i.id))
     setNewsUnread(0)
   }, [newsItems])
 
-  // Bell items: synthetic update entry (when dismissed) + one per kind from news
+  // Bell items: update entry (always when version known) + one per kind from news
   const bellItems = useMemo(() => {
     type BellItem = { id: string; kind: 'update-available' | 'release' | 'announcement'; title: string; body?: string; date: string; url?: string }
     const items: BellItem[] = []
-    if (updaterDismissed && updateVersion) {
-      items.push({ id: 'update-available', kind: 'update-available', title: `v${updateVersion} is available`, body: 'Click to install the latest update', date: new Date().toISOString() })
+    if (updateVersion) {
+      items.push({ id: 'update-available', kind: 'update-available', title: `v${updateVersion} is available`, body: 'Open dashboard to install', date: new Date().toISOString() })
     }
     const seen = new Set<string>()
     for (const i of newsItems.filter(n => n.type !== 'ad')) {
@@ -107,7 +124,7 @@ export default function App() {
       items.push({ id: i.id, kind, title: i.title, body: i.body, date: i.publishedAt, url: i.action?.url })
     }
     return items
-  }, [newsItems, updaterDismissed, updateVersion])
+  }, [newsItems, updateVersion])
 
   const refresh = useCallback(async () => {
     try {
@@ -171,11 +188,7 @@ export default function App() {
         className="relative w-full bg-bg-elevated rounded-2xl overflow-hidden"
         style={{ boxShadow: '0 8px 40px rgba(0,0,0,0.65), 0 0 0 1px rgba(245,158,11,0.12)' }}
       >
-        <UpdaterModal
-          dismissed={updaterDismissed && !showUpdaterModal}
-          onDismiss={() => { setUpdaterDismissed(true); setShowUpdaterModal(false) }}
-          onUpdateAvailable={(v) => setUpdateVersion(v)}
-        />
+        {/* UpdaterModal lives in the Dashboard — tray popup uses a compact pill instead */}
         {/* ── Charger-connected flash overlay ──────────────────────────── */}
         <AnimatePresence>
           {chargerFlash && (
@@ -227,6 +240,17 @@ export default function App() {
                 {status.temperatureCelsius.toFixed(1)}°C
               </span>
             )}
+            {/* Compact update pill — only when update available */}
+            {updateVersion && (
+              <button
+                onClick={() => openDashboard()}
+                title={`v${updateVersion} available — click to open dashboard`}
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-primary/15 border border-primary/30 text-primary text-[10px] font-semibold hover:bg-primary/25 transition-colors"
+              >
+                <svg width="7" height="7" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4l8 8h-5v8H9v-8H4z"/></svg>
+                v{updateVersion}
+              </button>
+            )}
             {/* Last-updated dot */}
             <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" title={`Updated ${Math.round((Date.now() - lastUpdate) / 1000)}s ago`} />
             <NewsBell
@@ -234,7 +258,7 @@ export default function App() {
               unreadCount={newsUnread}
               loading={newsLoading}
               onMarkAllRead={handleMarkAllRead}
-              onTriggerUpdate={() => { setShowUpdaterModal(true) }}
+              onTriggerUpdate={() => openDashboard()}
             />
             <CloseBtn />
           </div>

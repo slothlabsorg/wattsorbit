@@ -983,9 +983,79 @@ function PowerDataView({ onBack, onOpenNews, newsUnread }: { onBack: () => void;
 
 // ── Shell — landing ↔ data ↔ news ────────────────────────────────────────────
 
+const SNOOZE_KEY = 'wattsorbit.updateBannerSnoozedUntil'
+
+function UpdateBannerDashboard({ version, onInstall }: { version: string; onInstall: () => void }) {
+  const [visible, setVisible] = useState(() => {
+    try {
+      const snoozedUntil = Number(localStorage.getItem(SNOOZE_KEY) ?? 0)
+      return Date.now() > snoozedUntil
+    } catch { return true }
+  })
+
+  const snooze = () => {
+    try { localStorage.setItem(SNOOZE_KEY, String(Date.now() + 60 * 60 * 1000)) } catch {}
+    setVisible(false)
+  }
+
+  // Re-show after snooze expires (check every 5 min)
+  useEffect(() => {
+    if (visible) return
+    const t = setInterval(() => {
+      try {
+        if (Date.now() > Number(localStorage.getItem(SNOOZE_KEY) ?? 0)) setVisible(true)
+      } catch {}
+    }, 5 * 60 * 1000)
+    return () => clearInterval(t)
+  }, [visible])
+
+  if (!visible || !version) return null
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        key="update-banner"
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -8 }}
+        transition={{ duration: 0.2 }}
+        className="flex items-center gap-2 px-4 py-2 bg-primary/10 border-b border-primary/20 text-sm"
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className="text-primary flex-shrink-0"><path d="M12 4l8 8h-5v8H9v-8H4z"/></svg>
+        <span className="text-text-primary font-medium flex-1">
+          Version <span className="font-mono text-primary font-semibold">v{version}</span> is available
+        </span>
+        <button
+          onClick={onInstall}
+          className="px-3 py-1 bg-primary text-bg-base text-xs font-semibold rounded-lg hover:bg-primary/90 transition-colors"
+        >
+          Update Now
+        </button>
+        <button
+          onClick={snooze}
+          title="Remind me in 1 hour"
+          className="text-text-muted hover:text-text-primary text-xs transition-colors"
+        >
+          1h
+        </button>
+        <button
+          onClick={snooze}
+          title="Dismiss for 1 hour"
+          className="text-text-muted hover:text-text-primary transition-colors"
+          aria-label="Dismiss"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </motion.div>
+    </AnimatePresence>
+  )
+}
+
 export default function Dashboard() {
   const [view, setView] = useState<'home' | 'data' | 'news'>('home')
   const [newsUnread, setNewsUnread] = useState(0)
+  const [updateVersion, setUpdateVersion] = useState('')
+  const [showUpdaterModal, setShowUpdaterModal] = useState(false)
 
   // Load unread count for the News button badge
   useEffect(() => {
@@ -996,7 +1066,12 @@ export default function Dashboard() {
 
   return (
     <>
-    <UpdaterModal />
+    <UpdaterModal
+      dismissed={!showUpdaterModal}
+      onDismiss={() => setShowUpdaterModal(false)}
+      onUpdateAvailable={(v) => { setUpdateVersion(v); setShowUpdaterModal(true) }}
+    />
+    <UpdateBannerDashboard version={updateVersion} onInstall={() => setShowUpdaterModal(true)} />
     <AnimatePresence mode="wait">
       {view === 'home' ? (
         <motion.div key="home"

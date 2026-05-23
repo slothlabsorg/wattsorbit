@@ -29,6 +29,7 @@ fn main() {
             open_external_url,
             get_autostart,
             set_autostart,
+            open_dashboard,
         ])
         .setup(|app| {
             configure_popup(app);
@@ -63,14 +64,31 @@ fn configure_popup(app: &mut tauri::App) {
         });
     }
 
-    // Dashboard: prevent destroy on close — hide instead so it can be re-opened
-    // from the tray menu without losing its React state.
+    // Dashboard: prevent destroy on close — hide instead, and toggle dock icon.
+    // When dashboard is visible → Regular policy (app shows in Dock).
+    // When dashboard is hidden  → Accessory policy (no Dock icon, tray-only).
     if let Some(dash) = app.get_webview_window("dashboard") {
         let dash_hide = dash.clone();
+        let app_handle_dash = app.app_handle().clone();
         dash.on_window_event(move |event| {
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                let _ = dash_hide.hide();
+            match event {
+                tauri::WindowEvent::CloseRequested { api, .. } => {
+                    api.prevent_close();
+                    let _ = dash_hide.hide();
+                    #[cfg(target_os = "macos")]
+                    {
+                        use tauri::ActivationPolicy;
+                        let _ = app_handle_dash.set_activation_policy(ActivationPolicy::Accessory);
+                    }
+                }
+                tauri::WindowEvent::Focused(true) => {
+                    #[cfg(target_os = "macos")]
+                    {
+                        use tauri::ActivationPolicy;
+                        let _ = app_handle_dash.set_activation_policy(ActivationPolicy::Regular);
+                    }
+                }
+                _ => {}
             }
         });
     }
@@ -270,6 +288,20 @@ fn set_autostart(enabled: bool, app: tauri::AppHandle) -> Result<(), String> {
     }
 }
 
+#[tauri::command]
+fn open_dashboard(app: tauri::AppHandle) {
+    #[cfg(target_os = "macos")]
+    {
+        use tauri::ActivationPolicy;
+        let _ = app.set_activation_policy(ActivationPolicy::Regular);
+    }
+    if let Some(window) = app.get_webview_window("dashboard") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+}
+
 // ── Tray setup ────────────────────────────────────────────────────────────────
 
 fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
@@ -303,13 +335,14 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
         .on_menu_event(|app, event| match event.id().as_ref() {
             "dashboard" => {
                 if let Some(window) = app.get_webview_window("dashboard") {
-                    // unminimize first — after CloseRequested+prevent_close+hide,
-                    // macOS sometimes leaves the window in a miniaturized-like state
-                    // where a bare show() won't bring it back to the active space.
+                    #[cfg(target_os = "macos")]
+                    {
+                        use tauri::ActivationPolicy;
+                        let _ = app.set_activation_policy(ActivationPolicy::Regular);
+                        activate_dashboard(&window);
+                    }
                     let _ = window.unminimize();
                     let _ = window.show();
-                    #[cfg(target_os = "macos")]
-                    activate_dashboard(&window);
                     let _ = window.set_focus();
                 }
             }

@@ -156,3 +156,8 @@ export async function hideWindow(): Promise<void> {
   if (MOCK_MODE) return
   return invoke('hide_window')
 }
+
+export async function openDashboard(): Promise<void> {
+  if (MOCK_MODE) return
+  return invoke('open_dashboard')
+}
