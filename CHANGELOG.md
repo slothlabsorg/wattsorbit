@@ -7,6 +7,17 @@ this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.2.1] — 2026-05-23
+
+### Bug Fixes
+- Tray popup now closes when clicking anywhere outside it (app properly activates on open)
+- Header badge whitespace-nowrap — "On Battery" no longer wraps to two lines
+- Temperature shown as plain text without background pill to reduce header crowding
+- Temperature hidden below 28°C to reduce noise when battery is cool
+- Popup gap from menu bar increased from 8 to 14 px so it floats visibly below the bar
+
+---
+
 ## [1.2.0] — 2026-05-22
 
 ### New Features

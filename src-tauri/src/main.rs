@@ -373,18 +373,35 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
 
                 let w = 380_f64;
                 let x = position.x - w / 2.0;
-                let y = position.y + 8.0;
+                let y = position.y + 14.0; // extra gap so popup floats visibly below the menu bar
                 let _ = window.set_position(tauri::PhysicalPosition::new(x as i32, y as i32));
                 // Set level/behavior BEFORE show so FullScreenAuxiliary is in effect
                 // when the window first appears on a fullscreen space.
                 #[cfg(target_os = "macos")]
                 set_macos_popup_level(&window);
                 let _ = window.show();
-                // Re-apply level + call makeKeyAndOrderFront: AFTER show() because
-                // Tauri's show() resets NSWindow state and the window must already be
-                // visible for makeKeyAndOrderFront: to bring it to the current space.
+                // Activate the app so the popup becomes the key window. This is what
+                // makes macOS fire Focused(false) when the user clicks anywhere outside
+                // the popup — without activation, clicks on the desktop never trigger
+                // the blur event. Accessory policy means no dock icon / no space switch.
                 #[cfg(target_os = "macos")]
-                activate_popup(&window);
+                {
+                    use objc::{msg_send, sel, sel_impl, runtime::Object};
+                    if let Ok(ns_win_ptr) = window.ns_window() {
+                        let ns_win = ns_win_ptr as *mut Object;
+                        unsafe {
+                            let nil: *mut Object = std::ptr::null_mut();
+                            let _: () = msg_send![ns_win, makeKeyAndOrderFront: nil];
+                        }
+                    }
+                    let cls = objc::runtime::Class::get("NSApplication");
+                    if let Some(cls) = cls {
+                        unsafe {
+                            let nsapp: *mut Object = msg_send![cls, sharedApplication];
+                            let _: () = msg_send![nsapp, activateIgnoringOtherApps: 1_i8];
+                        }
+                    }
+                }
                 let _ = window.set_focus();
             }
         })

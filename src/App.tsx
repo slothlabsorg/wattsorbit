@@ -170,9 +170,9 @@ export default function App() {
 
   // Status badge label + color
   const badgeLabel = !status ? '' :
-    status.chargeState === 'charging'     ? '⚡ Charging' :
-    status.chargeState === 'charged'      ? '✓ Charged'  :
-                                            '🔋 On Battery'
+    status.chargeState === 'charging' ? 'Charging' :
+    status.chargeState === 'charged'  ? 'Charged'  :
+                                        'On Battery'
   const badgeClass = !status ? '' :
     status.chargeState === 'charging' ? 'bg-primary/15 text-primary'  :
     status.chargeState === 'charged'  ? 'bg-success/15 text-success'  :
@@ -209,7 +209,7 @@ export default function App() {
         {/* ── Drag / title bar ─────────────────────────────────────────── */}
         <div
           data-tauri-drag-region
-          className="flex items-center justify-between px-4 py-3 border-b border-border-subtle"
+          className="flex items-center justify-between px-4 py-2.5 border-b border-border-subtle"
         >
           <div className="flex items-center gap-2" data-tauri-drag-region>
             <BoltLogo />
@@ -217,23 +217,21 @@ export default function App() {
               WattsOrbit
             </span>
             {status && (
-              <span className={`text-xs px-1.5 py-0.5 rounded-md font-mono font-medium ${badgeClass}`}>
+              <span className={`text-xs px-1.5 py-0.5 rounded-md font-mono font-medium whitespace-nowrap ${badgeClass}`}>
                 {badgeLabel}
               </span>
             )}
           </div>
 
-          <div className="flex items-center gap-2">
-            {/* Battery temperature pill — amber if warm, red if hot */}
-            {status?.temperatureCelsius != null && (
+          <div className="flex items-center gap-1.5">
+            {/* Battery temperature — show only when warm/hot to save space when cold */}
+            {status?.temperatureCelsius != null && status.temperatureCelsius >= 28 && (
               <span
-                className="text-xs font-mono px-1.5 py-0.5 rounded-md"
+                className="text-[11px] font-mono"
                 style={
-                  status.temperatureCelsius >= 40
-                    ? { background: 'rgba(248,113,113,0.15)', color: '#f87171' }
-                    : status.temperatureCelsius >= 35
-                    ? { background: 'rgba(251,191,36,0.15)', color: '#fbbf24' }
-                    : { background: 'rgba(255,255,255,0.06)', color: '#6b7280' }
+                  status.temperatureCelsius >= 40 ? { color: '#f87171' }
+                  : status.temperatureCelsius >= 35 ? { color: '#fbbf24' }
+                  : { color: '#6b7280' }
                 }
                 title="Battery temperature"
               >
