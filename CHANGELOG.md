@@ -7,6 +7,13 @@ this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.3.0] — 2026-06-02
+
+### Other Changes
+- Test release to validate the end-to-end update pipeline (in-app updater + Homebrew cask). No functional changes — version bump only.
+
+---
+
 ## [1.2.1] — 2026-05-23
 
 ### Bug Fixes
