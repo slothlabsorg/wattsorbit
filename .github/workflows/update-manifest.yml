@@ -13,6 +13,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main
+          # RELEASE_TOKEN is a PAT with bypass on the main branch-protection rule.
+          # The default GITHUB_TOKEN cannot push to main (PR required), so the
+          # persisted credentials used by "git push origin main" below must be
+          # this PAT — same pattern as HOMEBREW_TAP_TOKEN in update-tap.yml.
+          token: ${{ secrets.RELEASE_TOKEN }}
 
       - name: Generate latest.json
         env:
