@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 
 interface UpdateInfo {
@@ -35,9 +35,13 @@ interface UpdaterModalProps {
   dismissed?: boolean
   onDismiss?: () => void
   onUpdateAvailable?: (version: string, body: string | null) => void
+  /** Increment to trigger a manual re-check for updates. */
+  checkTrigger?: number
+  /** Called when a manual check completes and no update was found. */
+  onNoUpdate?: () => void
 }
 
-export function UpdaterModal({ dismissed: dismissedProp, onDismiss, onUpdateAvailable }: UpdaterModalProps = {}) {
+export function UpdaterModal({ dismissed: dismissedProp, onDismiss, onUpdateAvailable, checkTrigger, onNoUpdate }: UpdaterModalProps = {}) {
   const [state, setState] = useState<UpdaterState>(
     getMockParam() ? { status: 'available', info: MOCK_UPDATE } : { status: 'idle' }
   )
@@ -53,13 +57,16 @@ export function UpdaterModal({ dismissed: dismissedProp, onDismiss, onUpdateAvai
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const checkForUpdate = useCallback(async () => {
+  const checkForUpdate = useCallback(async (manual = false) => {
     if (getMockParam()) return // already pre-populated
     try {
       // Dynamic import so it doesn't crash in browser/mock mode
       const { check } = await import('@tauri-apps/plugin-updater')
       const update = await check()
-      if (!update) return
+      if (!update) {
+        if (manual) onNoUpdate?.()
+        return
+      }
       const info = {
         version: update.version,
         body: update.body ?? null,
@@ -68,15 +75,23 @@ export function UpdaterModal({ dismissed: dismissedProp, onDismiss, onUpdateAvai
       setState({ status: 'available', info })
       onUpdateAvailable?.(info.version, info.body)
     } catch {
-      // Not in Tauri or no update — silent
+      if (manual) onNoUpdate?.()
     }
-  }, [onUpdateAvailable])
+  }, [onUpdateAvailable, onNoUpdate])
 
-  // Check 3 s after mount
+  // Auto-check 3 s after mount
   useEffect(() => {
-    const t = setTimeout(checkForUpdate, 3000)
+    const t = setTimeout(() => checkForUpdate(false), 3000)
     return () => clearTimeout(t)
   }, [checkForUpdate])
+
+  // Manual re-check when checkTrigger is incremented
+  const prevTriggerRef = useRef(0)
+  useEffect(() => {
+    if (!checkTrigger || checkTrigger === prevTriggerRef.current) return
+    prevTriggerRef.current = checkTrigger
+    checkForUpdate(true)
+  }, [checkTrigger, checkForUpdate])
 
   const handleUpdate = useCallback(async () => {
     if (state.status !== 'available') return

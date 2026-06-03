@@ -58,6 +58,12 @@ fn configure_popup(app: &mut tauri::App) {
         let win_blur = win.clone();
         win.on_window_event(move |event| {
             if let tauri::WindowEvent::Focused(false) = event {
+                // Grace period: don't auto-hide if the popup was just opened.
+                // On Linux/Windows the window can lose focus momentarily right
+                // after show() before the WM delivers the focus grant.
+                if now_ms().saturating_sub(*LAST_OPEN_MS.lock().unwrap()) < 500 {
+                    return;
+                }
                 *LAST_HIDE_MS.lock().unwrap() = now_ms();
                 let _ = win_blur.hide();
             }
@@ -184,6 +190,9 @@ fn activate_dashboard(win: &tauri::WebviewWindow) {
 
 /// Tracks the last time the popup was hidden — used for debounce in tray click.
 static LAST_HIDE_MS: Mutex<u64> = Mutex::new(0);
+/// Tracks the last time the popup was opened — grace period to prevent the blur
+/// handler from immediately hiding it before it gains focus (Linux/Windows).
+static LAST_OPEN_MS: Mutex<u64> = Mutex::new(0);
 
 fn now_ms() -> u64 {
     std::time::SystemTime::now()
@@ -299,16 +308,26 @@ fn open_dashboard(app: tauri::AppHandle) {
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();
+        // Windows: briefly set always-on-top then clear it — this forces
+        // the window to the foreground when SetForegroundWindow would otherwise
+        // be blocked by focus-stealing prevention.
+        #[cfg(target_os = "windows")]
+        {
+            let _ = window.set_always_on_top(true);
+            let _ = window.set_always_on_top(false);
+        }
     }
 }
 
 // ── Tray setup ────────────────────────────────────────────────────────────────
 
 fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
+    let power_status   = MenuItemBuilder::with_id("popup", "Power Status").build(app)?;
     let open_dashboard = MenuItemBuilder::with_id("dashboard", "Open Dashboard").build(app)?;
     let separator      = tauri::menu::PredefinedMenuItem::separator(app)?;
     let quit           = MenuItemBuilder::with_id("quit", "Quit WattsOrbit").build(app)?;
     let menu = MenuBuilder::new(app)
+        .item(&power_status)
         .item(&open_dashboard)
         .item(&separator)
         .item(&quit)
@@ -333,6 +352,35 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
+            "popup" => {
+                // Show the small tray popup window from the context menu.
+                // This is the primary path on Linux (AppIndicator left-click
+                // doesn't fire events, so only the menu is reachable).
+                if let Some(window) = app.get_webview_window("main") {
+                    if window.is_visible().unwrap_or(false) {
+                        *LAST_HIDE_MS.lock().unwrap() = now_ms();
+                        let _ = window.hide();
+                        return;
+                    }
+                    // Position near bottom-right of screen (where the tray
+                    // notification area lives on Windows/Linux).
+                    if let Ok(Some(monitor)) = window.current_monitor() {
+                        let scale    = monitor.scale_factor();
+                        let size     = monitor.size();
+                        let popup_w  = (380.0 * scale) as i32;
+                        let popup_h  = (460.0 * scale) as i32;
+                        let margin   = (12.0 * scale) as i32;
+                        let x = size.width as i32 - popup_w - margin;
+                        let y = size.height as i32 - popup_h - margin;
+                        let _ = window.set_position(
+                            tauri::PhysicalPosition::new(x.max(0), y.max(0))
+                        );
+                    }
+                    *LAST_OPEN_MS.lock().unwrap() = now_ms();
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
             "dashboard" => {
                 if let Some(window) = app.get_webview_window("dashboard") {
                     #[cfg(target_os = "macos")]
@@ -344,6 +392,11 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
                     let _ = window.unminimize();
                     let _ = window.show();
                     let _ = window.set_focus();
+                    #[cfg(target_os = "windows")]
+                    {
+                        let _ = window.set_always_on_top(true);
+                        let _ = window.set_always_on_top(false);
+                    }
                 }
             }
             "quit" => app.exit(0),
@@ -373,12 +426,28 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
 
                 let w = 380_f64;
                 let x = position.x - w / 2.0;
-                let y = position.y + 14.0; // extra gap so popup floats visibly below the menu bar
+
+                // Position the popup above the tray icon when the tray sits in the
+                // lower half of the screen (Windows taskbar at the bottom), and below
+                // it when in the upper half (macOS menu bar at the top).
+                let monitor = window.current_monitor().ok().flatten();
+                let scale     = monitor.as_ref().map(|m| m.scale_factor()).unwrap_or(1.0);
+                let screen_h  = monitor.map(|m| m.size().height as f64).unwrap_or(1080.0);
+                let popup_h   = (460.0 * scale).round(); // logical height → physical px
+                let y = if position.y > screen_h / 2.0 {
+                    // Tray at the bottom — float popup above it
+                    (position.y - popup_h - 8.0).max(0.0)
+                } else {
+                    // Tray at the top — float popup below it
+                    position.y + 14.0
+                };
+
                 let _ = window.set_position(tauri::PhysicalPosition::new(x as i32, y as i32));
                 // Set level/behavior BEFORE show so FullScreenAuxiliary is in effect
                 // when the window first appears on a fullscreen space.
                 #[cfg(target_os = "macos")]
                 set_macos_popup_level(&window);
+                *LAST_OPEN_MS.lock().unwrap() = now_ms();
                 let _ = window.show();
                 // Activate the app so the popup becomes the key window. This is what
                 // makes macOS fire Focused(false) when the user clicks anywhere outside

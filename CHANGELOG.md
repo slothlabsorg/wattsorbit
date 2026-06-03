@@ -7,169 +7,144 @@ this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.4.0] — 2026-06-03
+
+### Bug Fixes
+
+**Linux — power data now works correctly**
+- AC adapter detection was hardcoded to `/sys/class/power_supply/AC/online`, which doesn't
+  exist on most Linux laptops (common names: `ACAD`, `ADP0`, `ADP1`, `AC0`). The app now
+  scans all power supply entries for the one with `type = Mains` — no more "always discharging"
+  even when plugged in, and `watts_in` now shows the correct value.
+- Added fallback power reading: if `power_now` doesn't exist (common on AMD/Intel laptops that
+  expose `current_now` + `voltage_now` instead), watts are derived from `current_now × voltage_now`.
+- Added fallback for time-remaining: if `energy_now` is absent, derived from
+  `charge_now × voltage_now`.
+
+**Windows — tray popup now appears**
+- The popup was positioned at `tray_y + 14 px`. With the Windows taskbar at the bottom of the
+  screen (e.g. tray at y ≈ 1055 on a 1080 p display), the popup rendered entirely off-screen.
+  Now detects whether the tray is in the upper or lower half of the screen and positions the
+  popup **above** the icon when at the bottom (`y = tray_y − popup_height − 8`).
+- Dashboard window now reliably comes to the foreground via a brief `always_on_top` toggle,
+  bypassing Windows focus-stealing prevention.
+
+**All platforms — popup no longer hides immediately on open**
+- Added a 500 ms grace period after `window.show()` during which blur events are ignored.
+  On Linux and Windows the window manager can deliver a `Focused(false)` event before the
+  focus grant arrives, causing the popup to vanish the instant it appeared.
+
+### New Features
+
+**Linux — tray menu "Power Status" item**
+- AppIndicator (the Linux tray backend) does not fire left-click events — only the context
+  menu is reachable. Added **Power Status** as the first menu item so Linux users can open
+  the popup directly from the tray. The popup opens anchored to the bottom-right corner of
+  the screen (where the notification area lives).
+
+**Dashboard landing — version info + Check for Updates**
+- Installed version (`v1.4.0`) is now shown in the footer of the landing page.
+- If an update is already detected, a pill shows the available version and opens the
+  update modal on click.
+- **Check for updates** button: clicking it spins a reload icon while checking; shows
+  `✓ Up to date` for 4 s if nothing is found, or opens the update modal if a newer
+  version is available.
+
+---
+
 ## [1.3.0] — 2026-06-02
 
 ### Other Changes
-- Test release to validate the end-to-end update pipeline (in-app updater + Homebrew cask). No functional changes — version bump only.
+- Test release to validate the end-to-end update pipeline (in-app updater + Homebrew cask).
 
 ---
 
 ## [1.2.1] — 2026-05-23
 
 ### Bug Fixes
-- Tray popup now closes when clicking anywhere outside it (app properly activates on open)
-- Header badge whitespace-nowrap — "On Battery" no longer wraps to two lines
+- Tray popup now closes when clicking anywhere outside it
+- Header badge `white-space: nowrap` — "On Battery" no longer wraps to two lines
 - Temperature shown as plain text without background pill to reduce header crowding
-- Temperature hidden below 28°C to reduce noise when battery is cool
-- Popup gap from menu bar increased from 8 to 14 px so it floats visibly below the bar
+- Temperature hidden below 28 °C to reduce noise when battery is cool
+- Popup gap from menu bar increased from 8 to 14 px
 
 ---
 
 ## [1.2.0] — 2026-05-22
 
 ### New Features
-- Tray popup: compact amber pill shows version instead of full modal overlay
-- Dashboard: sticky update banner with Update Now and 1h snooze (persists)
-- Dashboard: dock icon appears when dashboard opens, hides when closed
-- open_dashboard Tauri command wired to pill click and bell update item
+- Tray popup: compact amber pill shows available version instead of full modal overlay
+- Dashboard: sticky update banner with Update Now and 1 h snooze (persists across navigations)
+- Dashboard: dock icon appears when dashboard opens, hides when closed (macOS only)
+- `open_dashboard` Tauri command wired to pill click and bell update item
 
 ---
 
 ## [1.1.1] — 2026-05-21
 
 ### Bug Fixes
-- Minor stability fix to trigger updater test flow
+- Minor stability fix
 
 ---
 
 ## [1.1.0] — 2026-05-20
 
 ### New Features
-- NewsBell in the tray popup header — shows unread dot and dropdown with release notes and announcements
-- News screen in the Dashboard — full feed with markdown rendering, badges, and pull-to-refresh
-- UpdaterModal replaces UpdateBanner — changelog display, download progress, and in-app install
+- **NewsBell** in the tray popup header — unread dot + dropdown with release notes and announcements
+- **News screen** in the Dashboard — full feed with markdown rendering, badges, pull-to-refresh
+- **UpdaterModal** — replaces UpdateBanner with a proper changelog view, download progress bar,
+  and in-app install + relaunch
 - Homebrew Cask auto-update on release publish
-
-### Other Changes
-- SEO-optimized README with keyword-led headline and cross-link to the Orbit suite
 
 ---
 
 ## [1.0.0] — 2026-05-10
 
-First public release of WattsOrbit — a cross-platform tray power monitor for
-macOS, Windows, and Linux.
+First public release of WattsOrbit.
 
 ### New Features
 
 **Power monitoring**
-- Menu-bar icon with live watt reading that polls every 5 seconds using
-  macOS private power APIs (`IOPSCopyPowerSourcesInfo`, SMC keys) — no need
-  to open Activity Monitor to see what's draining your battery.
-- Compact popup with battery %, charge/discharge rate, time-to-empty /
-  time-to-full, charger detection (USB-C cable wattage), and temperature.
-- Per-app power consumption list, ranked by current draw.
-- Connected-device list showing USB devices with their current draw (useful
-  for spotting a SSD or dock that's quietly eating your battery).
-- Dedicated dashboard window with history graphs, charge sessions timeline,
-  battery-health panel (cycle count, max capacity, design capacity).
-- Native macOS notifications:
-  - Weak charger — when the adapter delivers less than the system pulls
-    (e.g. 30 W brick on a 60 W laptop).
-  - Low battery + draining USB devices.
-  - Charge-limit warning at 80 % (stay-above-80 % wear guidance).
-  - Sustained high charge (80 % for 30+ min while plugged in).
+- Menu-bar / tray icon with live watt reading, polling every 5 s
+- Compact popup: battery %, charge/discharge rate, time-to-empty / time-to-full, charger
+  detection (USB-C wattage), temperature
+- Connected-device list showing USB devices with their estimated current draw
+- Dashboard window: history power-flow chart (last 2 h), charge sessions timeline,
+  battery-health panel (cycle count, max capacity vs design capacity, health %)
+- Native notifications: weak charger, low battery + draining USB devices, charge-limit
+  warning at 80 %, sustained high charge (80 % for 30+ min while plugged in)
 
-**Popup & tray**
-- Tray icon click shows the popup over fullscreen app spaces without
-  pulling the user out of their fullscreen context. Implemented by swapping
-  the NSWindow backing class to NSPanel with the non-activating style +
-  `FullScreenAuxiliary` collection behaviour.
-- Dashboard window reopens cleanly after the red-close button — it's
-  hidden (not destroyed) on `CloseRequested`, then brought back with
-  `unminimize + show + activateIgnoringOtherApps + makeKeyAndOrderFront`.
-- External links from the popup / dashboard open the system browser through
-  a sanitised `open_external_url` Rust command (http(s) only).
-- `UpdateBanner` also surfaces inside the dashboard, not just the popup.
+**macOS**
+- Tray popup floats over fullscreen app spaces without pulling the user out — implemented
+  via NSPanel class swap + non-activating style + `FullScreenAuxiliary` collection behaviour
+- Dashboard reopens cleanly after the red-close button (hidden not destroyed)
+- Battery data from `pmset` + `ioreg`
 
-**Platform / release**
-- Tauri 2 autostart plugin for "Launch at login" toggle.
-- In-app updater with changelog popup — users get notified and can install
-  without leaving the app.
-- Crash reporting scaffolding wired in so we can triage issues shipped
-  to real users.
-- Release workflow produces builds for five targets on every tag via
-  `tauri-apps/tauri-action`: macOS Apple Silicon (`aarch64-apple-darwin`),
-  macOS Intel (`x86_64-apple-darwin`), Linux x86_64 (`.deb` + `.AppImage`
-  on `ubuntu-22.04`), Linux aarch64 (`.deb` + `.AppImage` on
-  `ubuntu-22.04-arm`, for Raspberry Pi / Graviton / Linux-on-Apple-Silicon
-  VMs), and Windows x86_64 (`.msi` + `.nsis-setup.exe`).
-- CI (`ci.yml`) runs `cargo check` + `cargo test` on `macos-latest`,
-  `ubuntu-22.04`, `ubuntu-22.04-arm`, and `windows-latest` — regressions
-  on any OS/arch block `main`.
+**Windows**
+- Battery data via WMI (`Win32_Battery`, `BatteryStaticData`, `BatteryFullChargedCapacity`,
+  `BatteryCycleCount`)
+- USB devices via `Get-PnpDevice -Class USB` (hubs/controllers filtered)
+- Native toast notifications via `Windows.UI.Notifications`
 
-**Windows support**
-- Battery data via WMI: `Win32_Battery` for %/state/runtime, plus
-  `BatteryStaticData`, `BatteryFullChargedCapacity`, `BatteryCycleCount`
-  from `root/wmi` for battery-health fields (cycle count, design vs current
-  capacity, health %).
-- USB devices enumerated via `Get-PnpDevice -Class USB`, hub/controller
-  entries filtered out.
-- Native toasts via `Windows.UI.Notifications` (raw `ToastGeneric` XML).
-- "Open System Settings" opens `ms-settings:batterysaver` via `cmd /C start`.
-- External links open through the Windows shell (`cmd /C start ""`).
+**Linux**
+- Battery data via `/sys/class/power_supply/BAT*`
+- USB devices via `lsusb`
+- Notifications via `notify-send` (libnotify)
+- `.deb` declares all runtime dependencies so `apt install ./wattsorbit.deb` pulls WebKitGTK
+  automatically
 
-**Linux support**
-- Battery data via `/sys/class/power_supply/BAT*`: `capacity`, `status`,
-  `power_now`, `energy_now` for runtime; `cycle_count`, `charge_full_design`,
-  `charge_full`, `temp` for battery health.
-- AC detection via `/sys/class/power_supply/AC/online`.
-- USB devices via `lsusb` (hubs filtered out).
-- Notifications via `notify-send` (libnotify).
-- "Open System Settings" tries `gnome-control-center power`,
-  `systemsettings5 powerdevilglobalconfig`, then falls back to `xdg-open`.
-- External links via `xdg-open`.
-- `.deb` now declares its runtime dependencies (`libwebkit2gtk-4.1-0 (>=
-  2.38)`, `libgtk-3-0`, `libayatana-appindicator3-1`, `libnotify-bin`) so
-  `sudo apt install ./wattsorbit_<version>_<arch>.deb` pulls WebKitGTK
-  automatically on fresh systems. Previously the deps list was empty,
-  and installing via `dpkg -i` on a machine without WebKitGTK 4.1 would
-  silently succeed then crash at launch with `libwebkit2gtk-4.1.so.0:
-  cannot open shared object file`.
+**Release pipeline**
+- Tauri 2 in-app updater with changelog popup — users install without leaving the app
+- Builds for 5 targets on every tag: macOS Apple Silicon, macOS Intel, Windows x86_64,
+  Linux x86_64, Linux aarch64 (Raspberry Pi / ARM VMs)
+- CI runs `cargo check` + `cargo test` on all four OS/arch combinations — regressions on
+  any platform block `main`
+- Autostart plugin for "Launch at login"
 
-All three platforms share the same `PowerStatus` payload and React UI —
-platform-specific code lives behind `#[cfg(target_os = ...)]` gates in
-`src-tauri/src/commands/power.rs` and `src-tauri/src/main.rs`.
-
-**Testing**
-- Playwright screenshot suite for the popup and dashboard, plus an
-  interaction / smoke suite (23 tests, all green).
-- Native e2e script (`tests/native/dashboard-reopen.mjs`) that drives the
-  compiled binary via AppleScript to validate the dashboard-reopen and
-  tray-popup flows — things a browser-only Playwright run can't cover.
-
-### Bug Fixes
-
-- Fixed dashboard window not reopening after the first close — the
-  `CloseRequested` path now correctly prevents destroy and re-shows the
-  window on demand.
-- Fixed tray popup being pulled out of the fullscreen space by the app
-  activation call; the non-activating NSPanel conversion lets it float
-  over fullscreen without a space switch.
-- Fixed battery health / charge-state display inconsistencies.
-- Fixed external links opening inside the webview instead of the browser.
-- Fixed time-to-full / time-to-empty flipping states near the boundary.
-
-### Known limitations
-
-- Artifacts are unsigned on all three platforms — macOS shows "unverified
-  developer", Windows shows SmartScreen, Linux has no equivalent gate.
-  Signing/notarization secrets wiring is a follow-up.
-- Windows and Linux builds are shipping as a first pass — the Rust backend,
-  CI, and installer pipeline are in place but real-device smoke-testing
-  (tray icon contrast, notification behaviour across desktop environments,
-  tray click-to-popup geometry) is ongoing. Please file issues.
-- Linux tray requires AppIndicator support — on vanilla GNOME users need
-  the AppIndicator extension for the icon to appear.
-
+[1.4.0]: https://github.com/slothlabsorg/wattsorbit/releases/tag/v1.4.0
+[1.3.0]: https://github.com/slothlabsorg/wattsorbit/releases/tag/v1.3.0
+[1.2.1]: https://github.com/slothlabsorg/wattsorbit/releases/tag/v1.2.1
+[1.2.0]: https://github.com/slothlabsorg/wattsorbit/releases/tag/v1.2.0
+[1.1.1]: https://github.com/slothlabsorg/wattsorbit/releases/tag/v1.1.1
+[1.1.0]: https://github.com/slothlabsorg/wattsorbit/releases/tag/v1.1.0
 [1.0.0]: https://github.com/slothlabsorg/wattsorbit/releases/tag/v1.0.0

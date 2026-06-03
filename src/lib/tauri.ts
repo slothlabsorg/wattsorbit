@@ -161,3 +161,11 @@ export async function openDashboard(): Promise<void> {
   if (MOCK_MODE) return
   return invoke('open_dashboard')
 }
+
+export async function getAppVersion(): Promise<string> {
+  if (MOCK_MODE) return '0.0.0-dev'
+  try {
+    const { getVersion } = await import('@tauri-apps/api/app')
+    return getVersion()
+  } catch { return '' }
+}

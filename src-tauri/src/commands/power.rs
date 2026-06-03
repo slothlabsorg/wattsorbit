@@ -464,6 +464,21 @@ mod linux {
         None
     }
 
+    /// Find whether AC power is online by scanning all power_supply entries
+    /// for one with type "Mains".  Returns None if no AC adapter entry is found.
+    fn find_ac_online() -> Option<bool> {
+        let entries = fs::read_dir("/sys/class/power_supply/").ok()?;
+        for entry in entries.flatten() {
+            let kind = fs::read_to_string(entry.path().join("type"))
+                .unwrap_or_default();
+            if kind.trim() != "Mains" { continue; }
+            let online = fs::read_to_string(entry.path().join("online"))
+                .unwrap_or_default();
+            return Some(online.trim() == "1");
+        }
+        None
+    }
+
     pub fn fetch() -> PowerStatus {
         let Some(bat) = find_battery() else {
             return PowerStatus { error: Some("No battery found".into()), ..Default::default() };
@@ -474,23 +489,42 @@ mod linux {
             .unwrap_or(0);
 
         let status_str = read_file(&format!("{bat}/status")).unwrap_or_default();
-        let is_charging = matches!(status_str.as_str(), "Charging" | "Full");
 
-        let ac_online: bool = read_file("/sys/class/power_supply/AC/online")
-            .and_then(|s| s.parse::<u8>().ok())
-            .map(|v| v == 1)
-            .unwrap_or(false);
+        // AC adapter path varies: AC, AC0, ACAD, ADP0, ADP1, etc.
+        // Scan /sys/class/power_supply/ for any entry with type "Mains".
+        let ac_online: bool = find_ac_online().unwrap_or_else(|| {
+            // Fallback: trust the battery status string directly.
+            matches!(status_str.as_str(), "Charging" | "Full")
+        });
 
-        // Power in microwatts → Watts
+        // power_now in microwatts → Watts.
+        // Some hardware only exposes current_now (µA) + voltage_now (µV);
+        // derive power from those when power_now is absent.
         let power_now: Option<f64> = read_file(&format!("{bat}/power_now"))
             .and_then(|s| s.parse::<u64>().ok())
-            .map(|uw| uw as f64 / 1_000_000.0);
+            .map(|uw| uw as f64 / 1_000_000.0)
+            .or_else(|| {
+                let ua = read_file(&format!("{bat}/current_now"))
+                    .and_then(|s| s.parse::<u64>().ok())?;
+                let uv = read_file(&format!("{bat}/voltage_now"))
+                    .and_then(|s| s.parse::<u64>().ok())?;
+                if ua == 0 || uv == 0 { return None; }
+                Some(ua as f64 * uv as f64 / 1_000_000_000_000.0)
+            });
 
-        // Time remaining estimate
-        let time_remaining_min = if !is_charging {
+        // Time remaining estimate (only meaningful when on battery)
+        let time_remaining_min = if !ac_online {
             let energy_now = read_file(&format!("{bat}/energy_now"))
                 .and_then(|s| s.parse::<u64>().ok())
                 .map(|ue| ue as f64 / 1_000_000.0); // Wh
+            // Fallback: charge_now (µAh) × voltage_now (µV) / 10^9 → Wh
+            let energy_now = energy_now.or_else(|| {
+                let uah = read_file(&format!("{bat}/charge_now"))
+                    .and_then(|s| s.parse::<u64>().ok())?;
+                let uv  = read_file(&format!("{bat}/voltage_now"))
+                    .and_then(|s| s.parse::<u64>().ok())?;
+                Some(uah as f64 * uv as f64 / 1_000_000_000_000.0)
+            });
             if let (Some(e), Some(p)) = (energy_now, power_now) {
                 if p > 0.5 { Some((e / p * 60.0) as u32) } else { None }
             } else { None }

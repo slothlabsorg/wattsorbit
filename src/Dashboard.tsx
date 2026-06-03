@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { TodayStats, ChargeSession, DeviceStat, PowerSample, PowerStatus } from './types'
 import { deviceWatts, totalDeviceWatts } from './types'
-import { getTodayStats, getPowerStatus, openExternalUrl, openSystemSettings, setAutoStart } from './lib/tauri'
+import { getTodayStats, getPowerStatus, openExternalUrl, openSystemSettings, setAutoStart, getAppVersion } from './lib/tauri'
 import { openReport } from './lib/crash'
 import { UpdaterModal } from './components/UpdaterModal'
 import { News } from './screens/News'
@@ -405,7 +405,22 @@ const USE_CASES = [
   },
 ]
 
-function Landing({ onOpen, onOpenNews, newsUnread }: { onOpen: () => void; onOpenNews: () => void; newsUnread: number }) {
+function Landing({
+  onOpen, onOpenNews, newsUnread,
+  appVersion, updateVersion,
+  onCheckUpdates, checking, upToDate,
+  onOpenUpdater,
+}: {
+  onOpen: () => void
+  onOpenNews: () => void
+  newsUnread: number
+  appVersion: string
+  updateVersion: string
+  onCheckUpdates: () => void
+  checking: boolean
+  upToDate: boolean
+  onOpenUpdater: () => void
+}) {
   const [showAutostart, setShowAutostart] = useState(
     !localStorage.getItem(ASKED_KEY)
   )
@@ -481,6 +496,40 @@ function Landing({ onOpen, onOpenNews, newsUnread }: { onOpen: () => void; onOpe
             <p className="text-xs text-text-muted mt-0.5">
               Tiny tools for developers and power users.
             </p>
+            {/* Version row */}
+            <div className="flex items-center gap-2 mt-1.5">
+              {appVersion && (
+                <span className="text-xs font-mono text-text-muted/60">v{appVersion}</span>
+              )}
+              {updateVersion ? (
+                <button
+                  onClick={onOpenUpdater}
+                  className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-md bg-primary/15 border border-primary/30 text-primary font-semibold hover:bg-primary/25 transition-colors"
+                >
+                  <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4l8 8h-5v8H9v-8H4z"/></svg>
+                  v{updateVersion} available
+                </button>
+              ) : upToDate ? (
+                <span className="text-xs text-success font-medium">✓ Up to date</span>
+              ) : (
+                <button
+                  onClick={onCheckUpdates}
+                  disabled={checking}
+                  className="flex items-center gap-1.5 text-xs text-text-muted/60 hover:text-text-muted transition-colors disabled:cursor-default"
+                >
+                  {checking ? (
+                    <svg className="animate-spin" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                    </svg>
+                  ) : (
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                    </svg>
+                  )}
+                  {checking ? 'Checking…' : 'Check for updates'}
+                </button>
+              )}
+            </div>
           </div>
           <div className="flex items-center gap-3">
             <button
@@ -1056,6 +1105,10 @@ export default function Dashboard() {
   const [newsUnread, setNewsUnread] = useState(0)
   const [updateVersion, setUpdateVersion] = useState('')
   const [showUpdaterModal, setShowUpdaterModal] = useState(false)
+  const [appVersion, setAppVersion] = useState('')
+  const [checking, setChecking] = useState(false)
+  const [upToDate, setUpToDate] = useState(false)
+  const [checkTrigger, setCheckTrigger] = useState(0)
 
   // Load unread count for the News button badge
   useEffect(() => {
@@ -1064,12 +1117,31 @@ export default function Dashboard() {
     }).catch(() => {})
   }, [])
 
+  useEffect(() => {
+    getAppVersion().then(v => { if (v) setAppVersion(v) }).catch(() => {})
+  }, [])
+
+  const handleCheckUpdates = useCallback(() => {
+    if (checking) return
+    setChecking(true)
+    setUpToDate(false)
+    setCheckTrigger(t => t + 1)
+  }, [checking])
+
+  const handleNoUpdate = useCallback(() => {
+    setChecking(false)
+    setUpToDate(true)
+    setTimeout(() => setUpToDate(false), 4000)
+  }, [])
+
   return (
     <>
     <UpdaterModal
       dismissed={!showUpdaterModal}
       onDismiss={() => setShowUpdaterModal(false)}
-      onUpdateAvailable={(v) => { setUpdateVersion(v); setShowUpdaterModal(true) }}
+      onUpdateAvailable={(v) => { setUpdateVersion(v); setShowUpdaterModal(true); setChecking(false) }}
+      checkTrigger={checkTrigger}
+      onNoUpdate={handleNoUpdate}
     />
     <UpdateBannerDashboard version={updateVersion} onInstall={() => setShowUpdaterModal(true)} />
     <AnimatePresence mode="wait">
@@ -1077,7 +1149,17 @@ export default function Dashboard() {
         <motion.div key="home"
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}>
-          <Landing onOpen={() => setView('data')} onOpenNews={() => setView('news')} newsUnread={newsUnread} />
+          <Landing
+            onOpen={() => setView('data')}
+            onOpenNews={() => setView('news')}
+            newsUnread={newsUnread}
+            appVersion={appVersion}
+            updateVersion={updateVersion}
+            onCheckUpdates={handleCheckUpdates}
+            checking={checking}
+            upToDate={upToDate}
+            onOpenUpdater={() => setShowUpdaterModal(true)}
+          />
         </motion.div>
       ) : view === 'data' ? (
         <motion.div key="data"
