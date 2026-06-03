@@ -7,6 +7,13 @@ this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.4.1] — 2026-06-03
+
+### Other Changes
+- Pipeline validation release — same code as v1.4.0, confirms end-to-end updater flow.
+
+---
+
 ## [1.4.0] — 2026-06-03
 
 ### Bug Fixes
@@ -141,6 +148,7 @@ First public release of WattsOrbit.
   any platform block `main`
 - Autostart plugin for "Launch at login"
 
+[1.4.1]: https://github.com/slothlabsorg/wattsorbit/releases/tag/v1.4.1
 [1.4.0]: https://github.com/slothlabsorg/wattsorbit/releases/tag/v1.4.0
 [1.3.0]: https://github.com/slothlabsorg/wattsorbit/releases/tag/v1.3.0
 [1.2.1]: https://github.com/slothlabsorg/wattsorbit/releases/tag/v1.2.1
