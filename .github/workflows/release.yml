@@ -85,21 +85,35 @@ jobs:
 
       - run: npm ci
 
-      # No Apple code signing for v1.0.0 — the DMG ships unsigned and users
-      # will see "unverified developer" on first launch (right-click → Open
-      # gets around it). To enable signing later, add the six APPLE_* secrets
-      # to the repo and uncomment the block below.
-      #
-      #   APPLE_CERTIFICATE:          ${{ secrets.APPLE_CERTIFICATE }}
-      #   APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-      #   APPLE_SIGNING_IDENTITY:     ${{ secrets.APPLE_SIGNING_IDENTITY }}
-      #   APPLE_ID:                   ${{ secrets.APPLE_ID }}
-      #   APPLE_PASSWORD:             ${{ secrets.APPLE_PASSWORD }}
-      #   APPLE_TEAM_ID:              ${{ secrets.APPLE_TEAM_ID }}
-      #
-      # Windows code-signing is likewise deferred — the .msi ships unsigned
+      # Windows code-signing is deferred — the .msi ships unsigned
       # and SmartScreen will warn on first launch. Add WINDOWS_CERTIFICATE /
       # WINDOWS_CERTIFICATE_PASSWORD once an EV cert is purchased.
+
+      # Apple code-signing + notarization. Turns on automatically once the six
+      # APPLE_* secrets exist; without them the build ships an unsigned DMG.
+      # (Exported via GITHUB_ENV because Tauri treats an empty APPLE_CERTIFICATE
+      # as "sign with this" and fails.)
+      - name: Enable Apple code-signing (if configured)
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE:          ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY:     ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID:                   ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD:             ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID:              ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -z "$APPLE_CERTIFICATE" ]; then
+            echo "::warning::APPLE_* secrets not set — building an unsigned DMG"
+            exit 0
+          fi
+          for v in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            [ -n "${!v}" ] || { echo "::error::$v is missing — set all six APPLE_* secrets"; exit 1; }
+            { echo "$v<<__APPLE_EOF__"; echo "${!v}"; echo "__APPLE_EOF__"; } >> "$GITHUB_ENV"
+          done
+          echo "Apple signing + notarization enabled"
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
